@@ -12,7 +12,7 @@ const Home: React.FC = () => {
     return (
         <div className="space-y-16 pb-12">
             {/* Hero Section */}
-            <section className="relative h-[600px] -mt-8 flex items-center overflow-hidden rounded-b-[4rem] shadow-2xl">
+            <section className="relative min-h-[600px] lg:h-[600px] -mt-8 flex items-center overflow-hidden rounded-b-[2.5rem] md:rounded-b-[4rem] shadow-2xl py-20 lg:py-0">
                 {/* Background Image with Overlay */}
                 <div className="absolute inset-0">
                     <img
@@ -20,16 +20,16 @@ const Home: React.FC = () => {
                         alt="Legal Justice"
                         className="w-full h-full object-cover"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-r from-slate-900 via-slate-900/80 to-transparent"></div>
+                    <div className="absolute inset-0 bg-gradient-to-b md:bg-gradient-to-r from-slate-900 via-slate-900/80 to-transparent/50"></div>
                 </div>
 
                 <div className={`relative max-w-7xl mx-auto px-4 w-full transition-all duration-1000 transform ${isVisible ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'}`}>
-                    <div className="max-w-2xl">
+                    <div className="max-w-2xl pt-10 md:pt-0">
                         <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500/10 border border-blue-500/20 rounded-full text-blue-400 font-semibold mb-6 backdrop-blur-sm">
                             <Scale className="h-4 w-4" />
                             <span>Premier Legal Management System</span>
                         </div>
-                        <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight">
+                        <h1 className="text-4xl md:text-7xl font-bold text-white mb-6 leading-tight">
                             Justice <span className="text-blue-500">Redefined.</span><br />
                             Cases <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">Simplified.</span>
                         </h1>
