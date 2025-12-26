@@ -78,6 +78,17 @@ export const getAppointments = async (): Promise<AppointmentRecord[]> => {
 };
 
 export const saveAppointment = async (appointment: Omit<AppointmentRecord, 'id' | 'status' | 'createdAt'>) => {
+    // Check for existing email
+    const { data: existing } = await supabase
+        .from('appointments')
+        .select('id')
+        .eq('email_id', appointment.emailId)
+        .single();
+
+    if (existing) {
+        throw new Error('This email address has already been used for an appointment.');
+    }
+
     const { data, error } = await supabase
         .from('appointments')
         .insert([mapToSnakeCase(appointment)])
