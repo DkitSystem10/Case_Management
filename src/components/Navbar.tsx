@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Menu, X, Gavel, Home, Calendar, Users, Search, BarChart2 } from 'lucide-react';
+import { Menu, X, Home, Calendar, Users, Search, BarChart2 } from 'lucide-react';
+import LegalLogo from './LegalLogo';
 
 const Navbar: React.FC = () => {
     const [isOpen, setIsOpen] = useState(false);
@@ -18,8 +19,8 @@ const Navbar: React.FC = () => {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex justify-between h-20">
                     <div className="flex items-center">
-                        <div className="flex-shrink-0 flex items-center gap-2">
-                            <Gavel className="h-8 w-8 text-blue-400" />
+                        <div className="flex-shrink-0 flex items-center gap-3">
+                            <LegalLogo className="h-10 w-10" />
                             <span className="text-xl font-bold tracking-tight">
                                 CASE <span className="text-blue-400">MANAGEMENT</span>
                             </span>

@@ -12,7 +12,7 @@ const Home: React.FC = () => {
     return (
         <div className="space-y-16 pb-12">
             {/* Hero Section */}
-            <section className="relative min-h-[600px] lg:h-[600px] -mt-8 flex items-center overflow-hidden rounded-b-[2.5rem] md:rounded-b-[4rem] shadow-2xl py-20 lg:py-0">
+            <section className="relative min-h-[600px] lg:h-[600px] -mt-16 md:-mt-8 flex items-center overflow-hidden rounded-b-[2.5rem] md:rounded-b-[4rem] shadow-2xl py-20 lg:py-0">
                 {/* Background Image with Overlay */}
                 <div className="absolute inset-0">
                     <img

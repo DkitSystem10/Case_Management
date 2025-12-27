@@ -1,12 +1,13 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
+import Footer from './components/Footer';
+import CallButton from './components/CallButton';
 import ScrollToTop from './components/ScrollToTop';
 import Home from './pages/Home';
 import Appointment from './pages/Appointment';
 import CaseCounselling from './pages/CaseCounselling';
 import CaseFinder from './pages/CaseFinder';
 import Reports from './pages/Reports';
-import Placeholder from './pages/Placeholder';
 import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
 import PaymentPage from './pages/PaymentPage';
@@ -30,6 +31,8 @@ function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
+        <Footer />
+        <CallButton />
       </div>
     </Router>
   );

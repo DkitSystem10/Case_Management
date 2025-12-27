@@ -18,17 +18,21 @@ import {
     Clock,
     Filter,
     CreditCard,
-    Zap,
     IndianRupee,
     UserCheck,
     Star,
-    Award
+    ArrowRight,
+    Lock,
+    Check,
+    Search,
+    X
 } from 'lucide-react';
 
 const AdminDashboard: React.FC = () => {
     const [appointments, setAppointments] = useState<AppointmentRecord[]>([]);
     const [lawyers, setLawyers] = useState<Lawyer[]>([]);
     const [filter, setFilter] = useState<'All' | 'Pending' | 'Approved' | 'Rejected'>('All');
+    const [searchQuery, setSearchQuery] = useState('');
     const navigate = useNavigate();
 
     const [isLoading, setIsLoading] = useState(true);
@@ -102,9 +106,26 @@ const AdminDashboard: React.FC = () => {
         navigate('/admin/login');
     };
 
-    const filteredData = appointments.filter(app =>
-        filter === 'All' ? true : app.status === filter
-    );
+    const filteredData = appointments
+        .filter(app => filter === 'All' ? true : app.status === filter)
+        .filter(app => {
+            if (!searchQuery.trim()) return true;
+            const query = searchQuery.toLowerCase();
+            return (
+                app.fullName.toLowerCase().includes(query) ||
+                app.phoneNumber.toLowerCase().includes(query) ||
+                app.emailId.toLowerCase().includes(query)
+            );
+        });
+
+    // Helper function to determine workflow step
+    const getWorkflowStep = (request: AppointmentRecord): number => {
+        if (request.status === 'Pending') return 1;
+        if (request.status === 'Rejected') return 0;
+        if (request.status === 'Approved' && !request.lawyerId) return 2;
+        if (request.status === 'Approved' && request.lawyerId) return 3;
+        return 0;
+    };
 
     return (
         <div className="space-y-8 pb-20">
@@ -138,6 +159,43 @@ const AdminDashboard: React.FC = () => {
                 ))}
             </div>
 
+            {/* Search Bar */}
+            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+                    <div className="flex-1 w-full md:max-w-xl">
+                        <div className="relative">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                placeholder="Search by name, phone number, or email..."
+                                className="w-full pl-12 pr-12 py-3.5 bg-slate-50 border-2 border-slate-200 rounded-2xl font-medium text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white outline-none transition-all"
+                            />
+                            {searchQuery && (
+                                <button
+                                    onClick={() => setSearchQuery('')}
+                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                                >
+                                    <X className="h-5 w-5" />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                        <span className="text-slate-500 font-medium">Showing</span>
+                        <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-lg font-bold">
+                            {filteredData.length}
+                        </span>
+                        <span className="text-slate-500 font-medium">of</span>
+                        <span className="px-3 py-1 bg-slate-100 text-slate-700 rounded-lg font-bold">
+                            {appointments.length}
+                        </span>
+                        <span className="text-slate-500 font-medium">requests</span>
+                    </div>
+                </div>
+            </div>
+
             {/* Filter Tabs */}
             <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl w-fit">
                 {['All', 'Pending', 'Approved', 'Rejected'].map((f) => (
@@ -165,12 +223,16 @@ const AdminDashboard: React.FC = () => {
                         <p className="text-slate-500 font-medium text-lg">No {filter !== 'All' ? filter.toLowerCase() : ''} requests found.</p>
                     </div>
                 ) : (
-                    filteredData.map((request) => (
-                        <div key={request.id} className="bg-white border border-slate-200 rounded-[2.5rem] overflow-hidden shadow-sm hover:shadow-md transition-all">
-                            <div className="p-8">
-                                <div className="flex flex-col space-y-8">
-                                    <div className="flex flex-col xl:flex-row justify-between gap-8">
-                                        {/* Client Info */}
+                    filteredData.map((request) => {
+                        const currentStep = getWorkflowStep(request);
+                        const isApproved = request.status === 'Approved';
+                        const hasLawyer = !!request.lawyerId;
+
+                        return (
+                            <div key={request.id} className="bg-white border border-slate-200 rounded-[2.5rem] overflow-hidden shadow-sm hover:shadow-md transition-all">
+                                <div className="p-8">
+                                    {/* Client Info Header */}
+                                    <div className="flex flex-col lg:flex-row justify-between gap-6 mb-8">
                                         <div className="flex-1 space-y-4">
                                             <div className="flex items-center justify-between">
                                                 <h3 className="text-2xl font-bold text-slate-900">{request.fullName}</h3>
@@ -212,142 +274,214 @@ const AdminDashboard: React.FC = () => {
                                                 </p>
                                             </div>
                                         </div>
+                                    </div>
 
-                                        {/* Payment Section */}
-                                        <div className="flex-1 max-w-sm bg-blue-50/30 rounded-3xl p-6 border border-blue-100/50">
-                                            <div className="flex items-center gap-2 mb-4 text-blue-700">
-                                                <Zap className="h-5 w-5 fill-blue-700" />
-                                                <h4 className="font-bold uppercase tracking-wider text-xs">Fee Structuring</h4>
+                                    {/* Workflow Steps */}
+                                    <div className="mb-8">
+                                        <div className="flex items-center justify-between mb-6">
+                                            <h4 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Processing Workflow</h4>
+                                        </div>
+
+                                        {/* Step Indicators */}
+                                        <div className="flex items-center gap-2 mb-8">
+                                            {/* Step 1: Approval */}
+                                            <div className={`flex items-center gap-2 px-4 py-2 rounded-xl ${currentStep >= 1 && request.status !== 'Rejected' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
+                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center ${isApproved ? 'bg-emerald-600' : currentStep === 1 ? 'bg-amber-500' : 'bg-slate-300'}`}>
+                                                    {isApproved ? <Check className="h-4 w-4 text-white" /> : <span className="text-white text-xs font-bold">1</span>}
+                                                </div>
+                                                <span className="text-xs font-bold">Approval</span>
                                             </div>
 
-                                            <div className="space-y-4">
-                                                <div className="space-y-1.5">
-                                                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Consultation Fee</label>
-                                                    <div className="relative">
-                                                        <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-                                                        <input
-                                                            type="number"
-                                                            value={editingFees[request.id]?.consultation || 0}
-                                                            onChange={(e) => handleFeeChange(request.id, 'consultation', e.target.value)}
-                                                            className="w-full pl-9 pr-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm"
-                                                            placeholder="0.00"
-                                                        />
-                                                    </div>
-                                                </div>
+                                            <ArrowRight className="h-4 w-4 text-slate-300" />
 
-                                                <div className="space-y-1.5">
-                                                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Legal Case Fee</label>
-                                                    <div className="relative">
-                                                        <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-                                                        <input
-                                                            type="number"
-                                                            value={editingFees[request.id]?.case || 0}
-                                                            onChange={(e) => handleFeeChange(request.id, 'case', e.target.value)}
-                                                            className="w-full pl-9 pr-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm"
-                                                            placeholder="0.00"
-                                                        />
-                                                    </div>
+                                            {/* Step 2: Lawyer */}
+                                            <div className={`flex items-center gap-2 px-4 py-2 rounded-xl ${currentStep >= 2 ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-400'}`}>
+                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center ${hasLawyer ? 'bg-blue-600' : currentStep === 2 ? 'bg-amber-500' : 'bg-slate-300'}`}>
+                                                    {hasLawyer ? <Check className="h-4 w-4 text-white" /> : currentStep < 2 ? <Lock className="h-3 w-3 text-white" /> : <span className="text-white text-xs font-bold">2</span>}
                                                 </div>
+                                                <span className="text-xs font-bold">Assign Lawyer</span>
+                                            </div>
 
-                                                <button
-                                                    onClick={() => handleProcessPayment(request.id)}
-                                                    className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/10 group"
-                                                >
-                                                    <CreditCard className="h-4 w-4 group-hover:animate-bounce" />
-                                                    Bill & Payment Page
-                                                </button>
+                                            <ArrowRight className="h-4 w-4 text-slate-300" />
+
+                                            {/* Step 3: Payment */}
+                                            <div className={`flex items-center gap-2 px-4 py-2 rounded-xl ${currentStep >= 3 ? 'bg-purple-50 text-purple-700' : 'bg-slate-100 text-slate-400'}`}>
+                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center ${currentStep === 3 ? 'bg-purple-600' : 'bg-slate-300'}`}>
+                                                    {currentStep < 3 ? <Lock className="h-3 w-3 text-white" /> : <span className="text-white text-xs font-bold">3</span>}
+                                                </div>
+                                                <span className="text-xs font-bold">Payment</span>
                                             </div>
                                         </div>
 
-                                        {/* Approve/Reject Actions */}
-                                        <div className="w-full xl:w-48 flex xl:flex-col gap-3 justify-center">
-                                            {request.status === 'Pending' ? (
-                                                <>
+                                        {/* Step 1: Approval Section */}
+                                        {currentStep === 1 && (
+                                            <div className="bg-amber-50/50 border border-amber-200 rounded-2xl p-6">
+                                                <div className="flex items-center gap-2 mb-4">
+                                                    <div className="w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center">
+                                                        <span className="text-white text-sm font-bold">1</span>
+                                                    </div>
+                                                    <h5 className="font-bold text-slate-900">Review & Approve Request</h5>
+                                                </div>
+                                                <p className="text-sm text-slate-600 mb-4">Review the client's request and decide whether to approve or reject.</p>
+                                                <div className="flex gap-3">
                                                     <button
                                                         onClick={() => handleStatusUpdate(request.id, 'Approved')}
                                                         className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20"
                                                     >
-                                                        <CheckCircle className="h-4 w-4" />
-                                                        Approve
+                                                        <CheckCircle className="h-5 w-5" />
+                                                        Approve Request
                                                     </button>
                                                     <button
                                                         onClick={() => handleStatusUpdate(request.id, 'Rejected')}
-                                                        className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-white border border-slate-200 text-red-600 rounded-xl font-bold hover:bg-red-50 transition-all"
+                                                        className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-white border-2 border-red-200 text-red-600 rounded-xl font-bold hover:bg-red-50 transition-all"
                                                     >
-                                                        <XCircle className="h-4 w-4" />
-                                                        Reject
+                                                        <XCircle className="h-5 w-5" />
+                                                        Reject Request
                                                     </button>
-                                                </>
-                                            ) : (
-                                                <div className="flex items-center justify-center h-full text-slate-400 font-bold text-sm italic">
-                                                    Action complete
                                                 </div>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* Lawyer Selection Section for Approved Requests */}
-                                    {request.status === 'Approved' && (
-                                        <div className="pt-6 border-t border-slate-100">
-                                            <div className="flex items-center gap-2 mb-6">
-                                                <Award className="h-5 w-5 text-amber-500" />
-                                                <h4 className="text-lg font-bold text-slate-900">Assign Legal Counsel</h4>
                                             </div>
+                                        )}
 
-                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                                {lawyers.map((lawyer) => {
-                                                    const isAssigned = request.lawyerId === lawyer.id;
-                                                    return (
-                                                        <div
-                                                            key={lawyer.id}
-                                                            className={`relative p-4 rounded-3xl border transition-all ${isAssigned
-                                                                    ? 'border-blue-500 bg-blue-50/30 ring-1 ring-blue-500'
-                                                                    : 'border-slate-100 hover:border-slate-200 bg-white shadow-sm'
-                                                                }`}
-                                                        >
-                                                            {isAssigned && (
-                                                                <div className="absolute -top-2 -right-2 bg-blue-500 text-white rounded-full p-1 shadow-lg">
-                                                                    <UserCheck className="h-4 w-4" />
-                                                                </div>
-                                                            )}
-                                                            <div className="flex items-center gap-3 mb-3">
-                                                                <img
-                                                                    src={lawyer.imageUrl}
-                                                                    alt={lawyer.name}
-                                                                    className="w-12 h-12 rounded-2xl object-cover shadow-sm"
-                                                                />
-                                                                <div>
-                                                                    <h5 className="font-bold text-slate-900 text-sm leading-tight">{lawyer.name}</h5>
-                                                                    <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">{lawyer.specialization}</p>
-                                                                </div>
-                                                            </div>
-                                                            <div className="flex justify-between items-center text-xs text-slate-500 mb-4">
-                                                                <span className="font-medium">{lawyer.experience} Exp</span>
-                                                                <div className="flex items-center gap-1 font-bold text-amber-500">
-                                                                    <Star className="h-3 w-3 fill-amber-500" />
-                                                                    {lawyer.rating}
-                                                                </div>
-                                                            </div>
-                                                            <button
-                                                                onClick={() => handleAssignLawyer(request.id, lawyer.id)}
-                                                                disabled={isAssigned}
-                                                                className={`w-full py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${isAssigned
-                                                                        ? 'bg-blue-200 text-blue-700 cursor-default'
-                                                                        : 'bg-slate-900 text-white hover:bg-slate-800 active:scale-95'
+                                        {/* Step 2: Lawyer Assignment Section */}
+                                        {currentStep === 2 && (
+                                            <div className="bg-blue-50/50 border border-blue-200 rounded-2xl p-6">
+                                                <div className="flex items-center gap-2 mb-4">
+                                                    <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+                                                        <span className="text-white text-sm font-bold">2</span>
+                                                    </div>
+                                                    <h5 className="font-bold text-slate-900">Assign Legal Counsel</h5>
+                                                </div>
+                                                <p className="text-sm text-slate-600 mb-6">Select an appropriate lawyer based on the case category and requirements.</p>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                                    {lawyers.map((lawyer) => {
+                                                        const isAssigned = request.lawyerId === lawyer.id;
+                                                        return (
+                                                            <div
+                                                                key={lawyer.id}
+                                                                className={`relative p-4 rounded-2xl border transition-all ${isAssigned
+                                                                    ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-500'
+                                                                    : 'border-slate-200 hover:border-blue-300 bg-white shadow-sm'
                                                                     }`}
                                                             >
-                                                                {isAssigned ? 'Assigned' : 'Assign Contact'}
-                                                            </button>
-                                                        </div>
-                                                    );
-                                                })}
+                                                                {isAssigned && (
+                                                                    <div className="absolute -top-2 -right-2 bg-blue-500 text-white rounded-full p-1 shadow-lg">
+                                                                        <UserCheck className="h-4 w-4" />
+                                                                    </div>
+                                                                )}
+                                                                <div className="flex items-center gap-3 mb-3">
+                                                                    <img
+                                                                        src={lawyer.imageUrl}
+                                                                        alt={lawyer.name}
+                                                                        className="w-12 h-12 rounded-xl object-cover shadow-sm"
+                                                                    />
+                                                                    <div>
+                                                                        <h5 className="font-bold text-slate-900 text-sm leading-tight">{lawyer.name}</h5>
+                                                                        <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">{lawyer.specialization}</p>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex justify-between items-center text-xs text-slate-500 mb-4">
+                                                                    <span className="font-medium">{lawyer.experience} Exp</span>
+                                                                    <div className="flex items-center gap-1 font-bold text-amber-500">
+                                                                        <Star className="h-3 w-3 fill-amber-500" />
+                                                                        {lawyer.rating}
+                                                                    </div>
+                                                                </div>
+                                                                <button
+                                                                    onClick={() => handleAssignLawyer(request.id, lawyer.id)}
+                                                                    disabled={isAssigned}
+                                                                    className={`w-full py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${isAssigned
+                                                                        ? 'bg-blue-200 text-blue-700 cursor-default'
+                                                                        : 'bg-slate-900 text-white hover:bg-slate-800 active:scale-95'
+                                                                        }`}
+                                                                >
+                                                                    {isAssigned ? '✓ Assigned' : 'Assign'}
+                                                                </button>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
+                                        )}
+
+                                        {/* Step 3: Payment Section */}
+                                        {currentStep === 3 && (
+                                            <div className="bg-purple-50/50 border border-purple-200 rounded-2xl p-6">
+                                                <div className="flex items-center gap-2 mb-4">
+                                                    <div className="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center">
+                                                        <span className="text-white text-sm font-bold">3</span>
+                                                    </div>
+                                                    <h5 className="font-bold text-slate-900">Fee Structure & Payment</h5>
+                                                </div>
+                                                <p className="text-sm text-slate-600 mb-6">Set the consultation and case fees, then proceed to payment processing.</p>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                    <div className="space-y-4">
+                                                        <div className="space-y-1.5">
+                                                            <label className="text-xs font-black uppercase text-slate-500 ml-1">Consultation Fee</label>
+                                                            <div className="relative">
+                                                                <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                                                                <input
+                                                                    type="number"
+                                                                    value={editingFees[request.id]?.consultation || 0}
+                                                                    onChange={(e) => handleFeeChange(request.id, 'consultation', e.target.value)}
+                                                                    className="w-full pl-9 pr-4 py-3 bg-white border-2 border-slate-200 rounded-xl font-bold text-slate-900 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all"
+                                                                    placeholder="0.00"
+                                                                />
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="space-y-1.5">
+                                                            <label className="text-xs font-black uppercase text-slate-500 ml-1">Legal Case Fee</label>
+                                                            <div className="relative">
+                                                                <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                                                                <input
+                                                                    type="number"
+                                                                    value={editingFees[request.id]?.case || 0}
+                                                                    onChange={(e) => handleFeeChange(request.id, 'case', e.target.value)}
+                                                                    className="w-full pl-9 pr-4 py-3 bg-white border-2 border-slate-200 rounded-xl font-bold text-slate-900 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all"
+                                                                    placeholder="0.00"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex items-center justify-center">
+                                                        <button
+                                                            onClick={() => handleProcessPayment(request.id)}
+                                                            className="w-full py-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:from-purple-700 hover:to-blue-700 transition-all shadow-xl shadow-purple-600/20 group"
+                                                        >
+                                                            <CreditCard className="h-5 w-5 group-hover:scale-110 transition-transform" />
+                                                            Proceed to Payment
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Rejected State */}
+                                        {request.status === 'Rejected' && (
+                                            <div className="bg-red-50/50 border border-red-200 rounded-2xl p-6 text-center">
+                                                <XCircle className="h-12 w-12 text-red-500 mx-auto mb-3" />
+                                                <h5 className="font-bold text-slate-900 mb-2">Request Rejected</h5>
+                                                <p className="text-sm text-slate-600">This appointment request has been rejected and no further action is required.</p>
+                                            </div>
+                                        )}
+
+                                        {/* Completed State */}
+                                        {isApproved && hasLawyer && currentStep === 3 && (
+                                            <div className="mt-4 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+                                                <div className="flex items-center gap-2 text-emerald-700">
+                                                    <CheckCircle className="h-5 w-5" />
+                                                    <p className="text-sm font-bold">Ready for payment processing</p>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    ))
+                        );
+                    })
                 )}
             </div>
         </div>
@@ -355,3 +489,4 @@ const AdminDashboard: React.FC = () => {
 };
 
 export default AdminDashboard;
+
