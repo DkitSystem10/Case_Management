@@ -89,6 +89,19 @@ export const saveAppointment = async (appointment: Omit<AppointmentRecord, 'id' 
         throw new Error('This email address has already been used for an appointment.');
     }
 
+    // Check for existing appointment at same date and time
+    const { data: slotTaken } = await supabase
+        .from('appointments')
+        .select('id')
+        .eq('appointment_date', appointment.appointmentDate)
+        .eq('time_slot', appointment.timeSlot)
+        .eq('status', 'Approved') // Optimization: Only block if it was approved or pending? Usually better to block all valid requests.
+        .single();
+
+    if (slotTaken) {
+        throw new Error(`The time slot ${appointment.timeSlot} on ${appointment.appointmentDate} is already booked. Please choose another time.`);
+    }
+
     const { data, error } = await supabase
         .from('appointments')
         .insert([mapToSnakeCase(appointment)])

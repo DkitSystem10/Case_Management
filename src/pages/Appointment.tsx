@@ -149,26 +149,8 @@ const Appointment: React.FC = () => {
                 setIsSubmitting(false);
             }
         } else {
-            // Collect actual errors to show in modal
-            const errorList: string[] = [];
-            if (!formData.fullName) errorList.push("Full Name is required");
-            if (!formData.phoneNumber) {
-                errorList.push("Phone Number is required");
-            } else if (formData.phoneNumber.length !== 10) {
-                errorList.push("Phone Number must be exactly 10 digits");
-            }
-            if (!formData.emailId) errorList.push("Email ID is required");
-            if (!formData.appointmentDate) errorList.push("Preferred Date is required");
-            if (!formData.timeSlot) errorList.push("Time Slot selection is required");
-            if (!formData.caseCategory) errorList.push("Case Category selection is required");
-            if (formData.caseCategory === 'Others' && !formData.otherCategory) errorList.push("Category specification is required");
-
-            setModal({
-                show: true,
-                title: 'Required Information Missing',
-                message: errorList,
-                isError: true
-            });
+            // No modal here, errors are shown below each field via the 'errors' state
+            // Scroll to top or first error could be helpful, but for now we just let the UI show errors
         }
     };
 
