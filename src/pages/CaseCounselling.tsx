@@ -21,16 +21,18 @@ const ServiceCard: React.FC<ServiceCardProps> = ({ title, description, details, 
                         <img src={image} alt={title} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
                         <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 to-transparent h-1/2 top-1/2"></div>
                     </div>
-                    <div className="p-8 relative">
+                    <div className="p-8 h-1/2 flex flex-col relative">
                         <div className="absolute -top-10 right-8 w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg transform rotate-3 transition-transform group-hover:rotate-12">
                             <Icon className="h-8 w-8 text-white" />
                         </div>
-                        <h3 className="text-2xl font-bold text-slate-800 mb-3">{title}</h3>
-                        <p className="text-slate-500 leading-relaxed font-medium">
-                            {description}
-                        </p>
-                        <div className="absolute bottom-8 left-8 text-blue-600 font-bold flex items-center gap-2 text-sm uppercase tracking-wider">
-                            View Services <ArrowRight className="h-4 w-4" />
+                        <div className="flex-1 overflow-hidden">
+                            <h3 className="text-2xl font-bold text-slate-800 mb-3">{title}</h3>
+                            <p className="text-slate-500 leading-relaxed font-medium line-clamp-3">
+                                {description}
+                            </p>
+                        </div>
+                        <div className="mt-auto pt-4 text-slate-900 font-black flex items-center gap-2 text-xs uppercase tracking-[0.15em] group-hover:text-blue-600 transition-all">
+                            View Services <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1.5" />
                         </div>
                     </div>
                 </div>

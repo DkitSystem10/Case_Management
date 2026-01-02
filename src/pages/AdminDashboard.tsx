@@ -8,6 +8,7 @@ import {
     type AppointmentRecord,
     type Lawyer
 } from '../utils/storage';
+import { sendApprovalEmail } from '../utils/emailService';
 import {
     CheckCircle,
     XCircle,
@@ -73,6 +74,27 @@ const AdminDashboard: React.FC = () => {
     const handleStatusUpdate = async (id: string, status: 'Approved' | 'Rejected') => {
         try {
             await updateAppointmentStatus(id, status);
+
+            // AUTOMATION: Send email if approved
+            if (status === 'Approved') {
+                const app = appointments.find(a => a.id === id);
+                if (app) {
+                    console.log(`[Automation] Triggering approval email for ${app.fullName}...`);
+                    sendApprovalEmail({
+                        toEmail: app.emailId,
+                        fullName: app.fullName,
+                        appointmentDate: app.appointmentDate,
+                        timeSlot: app.timeSlot,
+                        consultationType: app.consultationType
+                    })
+                        .then(() => console.log("[Automation] Email sent successfully!"))
+                        .catch(err => {
+                            console.error("[Automation] Email failed to send:", err);
+                            alert(`Status updated, but email notification failed: ${err.text || err.message}`);
+                        });
+                }
+            }
+
             await loadData();
         } catch (error) {
             alert('Failed to update status.');
@@ -196,18 +218,20 @@ const AdminDashboard: React.FC = () => {
                 </div>
             </div>
 
-            {/* Filter Tabs */}
-            <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl w-fit">
-                {['All', 'Pending', 'Approved', 'Rejected'].map((f) => (
-                    <button
-                        key={f}
-                        onClick={() => setFilter(f as any)}
-                        className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${filter === f ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                            }`}
-                    >
-                        {f}
-                    </button>
-                ))}
+            {/* Filter Tabs - Mobile Responsive Scroll */}
+            <div className="overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide">
+                <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl w-max md:w-fit">
+                    {['All', 'Pending', 'Approved', 'Rejected'].map((f) => (
+                        <button
+                            key={f}
+                            onClick={() => setFilter(f as any)}
+                            className={`px-6 py-2 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${filter === f ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                                }`}
+                        >
+                            {f}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             {/* Requests List */}
@@ -277,39 +301,39 @@ const AdminDashboard: React.FC = () => {
                                     </div>
 
                                     {/* Workflow Steps */}
-                                    <div className="mb-8">
+                                    <div className="mb-8 overflow-hidden">
                                         <div className="flex items-center justify-between mb-6">
                                             <h4 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Processing Workflow</h4>
                                         </div>
 
-                                        {/* Step Indicators */}
-                                        <div className="flex items-center gap-2 mb-8">
+                                        {/* Step Indicators - Responsive Wrapping */}
+                                        <div className="flex flex-wrap items-center gap-y-4 gap-x-2 mb-8">
                                             {/* Step 1: Approval */}
-                                            <div className={`flex items-center gap-2 px-4 py-2 rounded-xl ${currentStep >= 1 && request.status !== 'Rejected' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
-                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center ${isApproved ? 'bg-emerald-600' : currentStep === 1 ? 'bg-amber-500' : 'bg-slate-300'}`}>
+                                            <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 ${currentStep >= 1 && request.status !== 'Rejected' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-slate-100 text-slate-400 border-transparent'}`}>
+                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${isApproved ? 'bg-emerald-600 shadow-sm shadow-emerald-500/30' : currentStep === 1 ? 'bg-amber-500' : 'bg-slate-300'}`}>
                                                     {isApproved ? <Check className="h-4 w-4 text-white" /> : <span className="text-white text-xs font-bold">1</span>}
                                                 </div>
-                                                <span className="text-xs font-bold">Approval</span>
+                                                <span className="text-xs font-bold whitespace-nowrap">Approval</span>
                                             </div>
 
-                                            <ArrowRight className="h-4 w-4 text-slate-300" />
+                                            <ArrowRight className="h-4 w-4 text-slate-300 hidden sm:block" />
 
                                             {/* Step 2: Lawyer */}
-                                            <div className={`flex items-center gap-2 px-4 py-2 rounded-xl ${currentStep >= 2 ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-400'}`}>
-                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center ${hasLawyer ? 'bg-blue-600' : currentStep === 2 ? 'bg-amber-500' : 'bg-slate-300'}`}>
+                                            <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 ${currentStep >= 2 ? 'bg-blue-50 text-blue-700 border-blue-100' : 'bg-slate-100 text-slate-400 border-transparent'}`}>
+                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${hasLawyer ? 'bg-blue-600 shadow-sm shadow-blue-500/30' : currentStep === 2 ? 'bg-amber-500' : 'bg-slate-300'}`}>
                                                     {hasLawyer ? <Check className="h-4 w-4 text-white" /> : currentStep < 2 ? <Lock className="h-3 w-3 text-white" /> : <span className="text-white text-xs font-bold">2</span>}
                                                 </div>
-                                                <span className="text-xs font-bold">Assign Lawyer</span>
+                                                <span className="text-xs font-bold whitespace-nowrap">Assign Lawyer</span>
                                             </div>
 
-                                            <ArrowRight className="h-4 w-4 text-slate-300" />
+                                            <ArrowRight className="h-4 w-4 text-slate-300 hidden sm:block" />
 
                                             {/* Step 3: Payment */}
-                                            <div className={`flex items-center gap-2 px-4 py-2 rounded-xl ${currentStep >= 3 ? 'bg-purple-50 text-purple-700' : 'bg-slate-100 text-slate-400'}`}>
-                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center ${currentStep === 3 ? 'bg-purple-600' : 'bg-slate-300'}`}>
+                                            <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 ${currentStep >= 3 ? 'bg-purple-50 text-purple-700 border-purple-100' : 'bg-slate-100 text-slate-400 border-transparent'}`}>
+                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${currentStep === 3 ? 'bg-purple-600 shadow-sm shadow-purple-500/30' : 'bg-slate-300'}`}>
                                                     {currentStep < 3 ? <Lock className="h-3 w-3 text-white" /> : <span className="text-white text-xs font-bold">3</span>}
                                                 </div>
-                                                <span className="text-xs font-bold">Payment</span>
+                                                <span className="text-xs font-bold whitespace-nowrap">Payment</span>
                                             </div>
                                         </div>
 

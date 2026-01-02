@@ -5,10 +5,30 @@
   --color-secondary: #334155;
 }
 
+@layer utilities {
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
 :root {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  scroll-behavior: smooth;
 }
 
 body {
-  @apply bg-gray-50 text-slate-900;
+  @apply bg-gray-50 text-slate-900 antialiased overflow-x-hidden;
+}
+
+/* Custom mobile improvements */
+@media (max-width: 640px) {
+  .container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
 }

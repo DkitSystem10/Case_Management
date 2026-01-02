@@ -51,7 +51,18 @@ const Appointment: React.FC = () => {
     const [errors, setErrors] = useState<Partial<Record<keyof AppointmentFormData, string>>>({});
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-        const { name, value } = e.target;
+        let { name, value } = e.target;
+
+        // Restriction for Phone Number: only digits and max 10 characters
+        if (name === 'phoneNumber') {
+            value = value.replace(/\D/g, '').slice(0, 10);
+        }
+
+        // Restriction for Full Name: only letters and spaces
+        if (name === 'fullName') {
+            value = value.replace(/[^a-zA-Z\s]/g, '');
+        }
+
         setFormData(prev => ({ ...prev, [name]: value }));
         // Clear error when user types
         if (errors[name as keyof AppointmentFormData]) {
@@ -62,7 +73,11 @@ const Appointment: React.FC = () => {
     const validateForm = () => {
         const newErrors: Partial<Record<keyof AppointmentFormData, string>> = {};
         if (!formData.fullName) newErrors.fullName = 'Full Name is required';
-        if (!formData.phoneNumber) newErrors.phoneNumber = 'Phone Number is required';
+        if (!formData.phoneNumber) {
+            newErrors.phoneNumber = 'Phone Number is required';
+        } else if (formData.phoneNumber.length !== 10) {
+            newErrors.phoneNumber = 'Phone Number must be exactly 10 digits';
+        }
         if (!formData.emailId) newErrors.emailId = 'Email ID is required';
         if (!formData.appointmentDate) newErrors.appointmentDate = 'Appointment Date is required';
         if (!formData.timeSlot) newErrors.timeSlot = 'Time Slot is required';
@@ -121,6 +136,17 @@ const Appointment: React.FC = () => {
     ];
 
     const caseCategories = ["Civil", "Criminal", "Family", "Corporate", "Property", "Others"];
+
+    const indianStates = [
+        "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
+        "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand",
+        "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur",
+        "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab",
+        "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura",
+        "Uttar Pradesh", "Uttarakhand", "West Bengal",
+        "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu",
+        "Delhi", "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry"
+    ];
 
     return (
         <div className="max-w-5xl mx-auto">
@@ -226,11 +252,18 @@ const Appointment: React.FC = () => {
                             <input
                                 type="text"
                                 name="state"
+                                list="states-datalist"
                                 value={formData.state}
                                 onChange={handleInputChange}
                                 placeholder="State"
+                                autoComplete="off"
                                 className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                             />
+                            <datalist id="states-datalist">
+                                {indianStates.map(state => (
+                                    <option key={state} value={state} />
+                                ))}
+                            </datalist>
                         </div>
                     </div>
                 </section>

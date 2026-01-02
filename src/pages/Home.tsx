@@ -29,7 +29,7 @@ const Home: React.FC = () => {
                             <Scale className="h-4 w-4" />
                             <span>Premier Legal Management System</span>
                         </div>
-                        <h1 className="text-4xl md:text-7xl font-bold text-white mb-6 leading-tight">
+                        <h1 className="text-3xl sm:text-5xl md:text-7xl font-bold text-white mb-6 leading-[1.1]">
                             Justice <span className="text-blue-500">Redefined.</span><br />
                             Cases <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">Simplified.</span>
                         </h1>
@@ -126,12 +126,12 @@ const Home: React.FC = () => {
 
             {/* CTA Section */}
             <div className="max-w-7xl mx-auto px-4">
-                <div className="bg-slate-900 rounded-[3rem] p-12 md:p-12 text-center relative overflow-hidden">
+                <div className="bg-slate-900 rounded-[2rem] md:rounded-[3rem] p-8 md:p-16 text-center relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl -mr-32 -mt-32"></div>
                     <div className="absolute bottom-0 left-0 w-96 h-96 bg-emerald-500/20 rounded-full blur-3xl -ml-32 -mb-32"></div>
 
                     <div className="relative z-10 max-w-3xl mx-auto space-y-8">
-                        <h2 className="text-4xl md:text-5xl font-bold text-white">Ready to secure your legal future?</h2>
+                        <h2 className="text-3xl md:text-5xl font-bold text-white">Ready to secure your legal future?</h2>
                         <p className="text-slate-400 text-xl">Join thousands of satisfied clients who trust LexConnect for their legal management needs.</p>
                         <button className="px-10 py-5 bg-white text-slate-900 rounded-2xl font-bold text-lg hover:bg-blue-50 transition-colors shadow-xl">
                             Get Started Now

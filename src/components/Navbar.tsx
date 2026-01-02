@@ -19,9 +19,9 @@ const Navbar: React.FC = () => {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex justify-between h-20">
                     <div className="flex items-center">
-                        <div className="flex-shrink-0 flex items-center gap-3">
-                            <LegalLogo className="h-10 w-10" />
-                            <span className="text-xl font-bold tracking-tight">
+                        <div className="flex-shrink-0 flex items-center gap-2 sm:gap-3">
+                            <LegalLogo className="h-8 w-8 sm:h-10 sm:w-10" />
+                            <span className="text-lg sm:text-xl font-bold tracking-tight">
                                 CASE <span className="text-blue-400">MANAGEMENT</span>
                             </span>
                         </div>
