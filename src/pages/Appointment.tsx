@@ -11,7 +11,10 @@ import {
     Briefcase,
     ChevronRight,
     ClipboardList,
-    Gavel
+    Gavel,
+    AlertCircle,
+    CheckCircle2,
+    X
 } from 'lucide-react';
 
 import { saveAppointment } from '../utils/storage';
@@ -49,6 +52,12 @@ const Appointment: React.FC = () => {
     });
 
     const [errors, setErrors] = useState<Partial<Record<keyof AppointmentFormData, string>>>({});
+    const [modal, setModal] = useState<{ show: boolean, title: string, message: string | string[], isError: boolean }>({
+        show: false,
+        title: '',
+        message: '',
+        isError: false
+    });
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         let { name, value } = e.target;
@@ -99,8 +108,20 @@ const Appointment: React.FC = () => {
         if (validateForm()) {
             setIsSubmitting(true);
             try {
-                await saveAppointment(formData);
-                alert('Appointment submitted successfully! Admin will review it.');
+                // Fix: Added consultationFee and caseFee to satisfy AppointmentRecord interface
+                await saveAppointment({
+                    ...formData,
+                    consultationFee: 0,
+                    caseFee: 0
+                });
+
+                setModal({
+                    show: true,
+                    title: 'Registration Successful!',
+                    message: 'Your appointment has been submitted successfully. Our legal team will review it and notify you via email shortly.',
+                    isError: false
+                });
+
                 setFormData({
                     fullName: '',
                     phoneNumber: '',
@@ -116,13 +137,38 @@ const Appointment: React.FC = () => {
                     description: '',
                 });
             } catch (error: any) {
-                alert(`Failed to save! Details: ${error.message || 'Unknown error'}`);
-                console.error('Supabase Error:', error);
+                // Show specific error (like duplicate email) in a pop-up
+                setModal({
+                    show: true,
+                    title: 'Submission Failed',
+                    message: error.message || 'Something went wrong. Please check your connection and try again.',
+                    isError: true
+                });
+                console.error('Submission Error:', error);
             } finally {
                 setIsSubmitting(false);
             }
         } else {
-            console.log('Validation Failed', errors);
+            // Collect actual errors to show in modal
+            const errorList: string[] = [];
+            if (!formData.fullName) errorList.push("Full Name is required");
+            if (!formData.phoneNumber) {
+                errorList.push("Phone Number is required");
+            } else if (formData.phoneNumber.length !== 10) {
+                errorList.push("Phone Number must be exactly 10 digits");
+            }
+            if (!formData.emailId) errorList.push("Email ID is required");
+            if (!formData.appointmentDate) errorList.push("Preferred Date is required");
+            if (!formData.timeSlot) errorList.push("Time Slot selection is required");
+            if (!formData.caseCategory) errorList.push("Case Category selection is required");
+            if (formData.caseCategory === 'Others' && !formData.otherCategory) errorList.push("Category specification is required");
+
+            setModal({
+                show: true,
+                title: 'Required Information Missing',
+                message: errorList,
+                isError: true
+            });
         }
     };
 
@@ -434,6 +480,40 @@ const Appointment: React.FC = () => {
                     </button>
                 </div>
             </form>
+
+            {/* Premium Status Modal */}
+            {modal.show && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white rounded-[2.5rem] w-full max-w-md overflow-hidden shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-300">
+                        <div className={`p-10 text-center ${modal.isError ? 'bg-red-50/50' : 'bg-emerald-50/50'}`}>
+                            <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 ${modal.isError ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                                {modal.isError ? <AlertCircle className="h-10 w-10" /> : <CheckCircle2 className="h-10 w-10" />}
+                            </div>
+                            <h3 className="text-2xl font-black text-slate-900 mb-4 leading-tight">{modal.title}</h3>
+
+                            {Array.isArray(modal.message) ? (
+                                <ul className="text-slate-500 font-medium text-sm space-y-2 text-left bg-white/50 p-6 rounded-2xl border border-dashed border-slate-200">
+                                    {modal.message.map((msg, idx) => (
+                                        <li key={idx} className="flex items-start gap-2">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-red-400 mt-1.5 shrink-0" />
+                                            {msg}
+                                        </li>
+                                    ))}
+                                </ul>
+                            ) : (
+                                <p className="text-slate-500 font-medium leading-relaxed">{modal.message}</p>
+                            )}
+
+                            <button
+                                onClick={() => setModal(prev => ({ ...prev, show: false }))}
+                                className={`w-full mt-8 py-4 rounded-2xl font-bold text-white transition-all active:scale-95 shadow-lg ${modal.isError ? 'bg-red-600 hover:bg-red-700 shadow-red-200' : 'bg-slate-900 hover:bg-slate-800 shadow-slate-200'}`}
+                            >
+                                {modal.isError ? 'Try Again' : 'Close Notification'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
