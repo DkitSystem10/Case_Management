@@ -94,7 +94,7 @@ const Appointment: React.FC = () => {
         }
         if (!formData.emailId) newErrors.emailId = 'Email ID is required';
         if (!formData.state) newErrors.state = 'State is required';
-        if (!formData.city) newErrors.city = 'City is required';
+        if (!formData.city) newErrors.city = 'District is required';
         if (!formData.appointmentDate) newErrors.appointmentDate = 'Appointment Date is required';
         if (!formData.timeSlot) newErrors.timeSlot = 'Time Slot is required';
         if (!formData.caseCategory) newErrors.caseCategory = 'Case Category is required';
@@ -161,14 +161,7 @@ const Appointment: React.FC = () => {
         }
     };
 
-    const timeSlots = [
-        "09:00 AM - 10:00 AM",
-        "10:00 AM - 11:00 AM",
-        "11:00 AM - 12:00 PM",
-        "02:00 PM - 03:00 PM",
-        "03:00 PM - 04:00 PM",
-        "04:00 PM - 05:00 PM",
-    ];
+    const timeSlots = ["Morning", "Afternoon"];
 
     const caseCategories = ["Civil", "Criminal", "Family", "Corporate", "Property", "Others"];
 
@@ -318,7 +311,7 @@ const Appointment: React.FC = () => {
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-sm font-medium text-slate-700">City</label>
+                            <label className="text-sm font-medium text-slate-700">District</label>
                             <select
                                 name="city"
                                 value={formData.city}
@@ -326,7 +319,7 @@ const Appointment: React.FC = () => {
                                 disabled={!formData.state}
                                 className={`w-full px-4 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 outline-none transition-all appearance-none bg-white ${!formData.state ? 'bg-slate-50 cursor-not-allowed opacity-60' : errors.city ? 'border-red-500 bg-red-50' : 'border-slate-300'}`}
                             >
-                                <option value="">Select City</option>
+                                <option value="">Select District</option>
                                 {availableCities.map(city => (
                                     <option key={city} value={city}>{city}</option>
                                 ))}
