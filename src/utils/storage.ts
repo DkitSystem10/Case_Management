@@ -18,6 +18,8 @@ export interface AppointmentRecord {
     consultationFee: number;
     caseFee: number;
     lawyerId?: string;
+    caseId?: string;
+    caseStage?: string;
     status: 'Pending' | 'Approved' | 'Rejected';
     createdAt: string;
 }
@@ -104,7 +106,7 @@ export const saveAppointment = async (appointment: Omit<AppointmentRecord, 'id' 
 
     const { data, error } = await supabase
         .from('appointments')
-        .insert([mapToSnakeCase(appointment)])
+        .insert([{ ...mapToSnakeCase(appointment), status: 'Pending' }])
         .select();
 
     if (error) {
@@ -142,6 +144,30 @@ export const updateAppointmentFees = async (id: string, consultationFee: number,
     }
 };
 
+export const updateCaseId = async (id: string, caseId: string) => {
+    const { error } = await supabase
+        .from('appointments')
+        .update({ case_id: caseId })
+        .eq('id', id);
+
+    if (error) {
+        console.error('Error updating case ID:', error);
+        throw error;
+    }
+};
+
+export const updateCaseStage = async (id: string, stage: string) => {
+    const { error } = await supabase
+        .from('appointments')
+        .update({ case_stage: stage })
+        .eq('id', id);
+
+    if (error) {
+        console.error('Error updating case stage:', error);
+        throw error;
+    }
+};
+
 // Helpers for Mapping
 const mapToSnakeCase = (app: any) => ({
     full_name: app.fullName,
@@ -156,7 +182,9 @@ const mapToSnakeCase = (app: any) => ({
     consultation_type: app.consultationType,
     case_category: app.caseCategory,
     other_category: app.otherCategory,
-    description: app.description
+    description: app.description,
+    case_id: app.caseId,
+    case_stage: app.caseStage
 });
 
 const mapToCamelCase = (row: any): AppointmentRecord => ({
@@ -174,9 +202,11 @@ const mapToCamelCase = (row: any): AppointmentRecord => ({
     caseCategory: row.case_category,
     otherCategory: row.other_category,
     description: row.description,
-    consultationFee: 0, // Default for UI demo
-    caseFee: 0,         // Default for UI demo
+    consultationFee: row.consultation_fee || 0,
+    caseFee: row.case_fee || 0,
     lawyerId: row.lawyer_id,
+    caseId: row.case_id,
+    caseStage: row.case_stage || 'Stage 1',
     status: row.status,
     createdAt: row.created_at
 });

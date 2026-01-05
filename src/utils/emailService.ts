@@ -11,10 +11,12 @@ interface EmailTemplateParams {
     appointmentDate: string;
     timeSlot: string;
     consultationType: string;
+    lawyerName?: string;
+    caseId?: string;
 }
 
 export const sendApprovalEmail = async (params: EmailTemplateParams) => {
-    const { toEmail, fullName, appointmentDate, timeSlot, consultationType } = params;
+    const { toEmail, fullName, appointmentDate, timeSlot, consultationType, lawyerName, caseId } = params;
 
     // Get credentials from environment variables
     const SERVICE_ID = import.meta.env.VITE_EMAILJS_SERVICE_ID;
@@ -32,6 +34,8 @@ export const sendApprovalEmail = async (params: EmailTemplateParams) => {
         date: appointmentDate,    // Changing 'appointment_date' to 'date'
         time: timeSlot,           // Changing 'time_slot' to 'time'
         type: consultationType,   // Changing 'consultation_type' to 'type'
+        lawyer: lawyerName || 'Assigned Counsel',
+        case_id: caseId || 'PENDING',
         reply_to: 'dkit.system10@gmail.com'
     };
 
