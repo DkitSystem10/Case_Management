@@ -25,3 +25,24 @@ INSERT INTO lawyers (name, specialization, experience, rating, image_url) VALUES
 ('Adv. Vikram Singh', 'Corporate & Business', '12 Years', 4.7, 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=200'),
 ('Adv. Anjali Verma', 'Property & Real Estate', '8 Years', 4.9, 'https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&q=80&w=200')
 ON CONFLICT DO NOTHING;
+
+-- 5. Add Case and Stage columns to appointments table
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS case_id TEXT;
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS case_stage TEXT DEFAULT 'Stage 1';
+
+-- 6. CREATE DEDICATED PAYMENTS TABLE
+CREATE TABLE IF NOT EXISTS payments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    appointment_id UUID REFERENCES appointments(id),
+    case_id TEXT,
+    client_name TEXT,
+    consultation_fee NUMERIC DEFAULT 0,
+    due_fee NUMERIC DEFAULT 0,
+    amount NUMERIC, -- Kept for total
+    payment_mode TEXT NOT NULL, -- Cash, Online, Cheque
+    transaction_id TEXT, -- For Online (txn_id) or Cheque (bank - num)
+    payment_date TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 7. DISABLE RLS FOR PAYMENTS
+ALTER TABLE payments DISABLE ROW LEVEL SECURITY;

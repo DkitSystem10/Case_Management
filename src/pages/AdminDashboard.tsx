@@ -6,16 +6,16 @@ import {
     getLawyers,
     assignLawyer,
     updateCaseId,
-    updateAppointmentFees,
+    updateAppointmentPayment,
     updateCaseStage,
+    getPaymentHistory,
     type AppointmentRecord,
-    type Lawyer
+    type Lawyer,
+    type PaymentRecord
 } from '../utils/storage';
 import { sendApprovalEmail } from '../utils/emailService';
 import {
     LogOut,
-    Mail,
-    Phone,
     Calendar,
     Clock,
     Search,
@@ -24,12 +24,18 @@ import {
     ListTodo,
     Bell,
     UserCheck,
-    IndianRupee
+    IndianRupee,
+    Download,
+    BarChart3,
+    Banknote,
+    Smartphone,
+    Wallet
 } from 'lucide-react';
 import LegalLogo from '../components/LegalLogo';
 
 const AdminDashboard: React.FC = () => {
     const [appointments, setAppointments] = useState<AppointmentRecord[]>([]);
+    const [paymentHistory, setPaymentHistory] = useState<PaymentRecord[]>([]);
     const navigate = useNavigate();
 
     const [isLoading, setIsLoading] = useState(true);
@@ -38,18 +44,25 @@ const AdminDashboard: React.FC = () => {
     const [lawyers, setLawyers] = useState<Lawyer[]>([]);
     const [selectedLawyerId, setSelectedLawyerId] = useState<string>('');
     const [searchQuery, setSearchQuery] = useState('');
-    const [searchDate, setSearchDate] = useState('');
-    const [appliedDate, setAppliedDate] = useState('');
-    const [activeStage, setActiveStage] = useState<'Inquiry' | 'Verified' | 'Payment' | 'Litigation' | 'Disposed'>('Inquiry');
+    const [appliedDate] = useState('');
+    const [activeStage, setActiveStage] = useState<'Inquiry' | 'Verified' | 'Payment' | 'Litigation' | 'History' | 'Disposed'>('Inquiry');
     const [activeCategory, setActiveCategory] = useState<string>('All');
     const [consultationFee, setConsultationFee] = useState<string>('');
     const [caseFee, setCaseFee] = useState<string>('');
     const [paymentMode, setPaymentMode] = useState<string>('Cash');
+    const [transactionId, setTransactionId] = useState('');
+    const [chequeNumber, setChequeNumber] = useState('');
+    const [bankName, setBankName] = useState('');
+    const [incomeDate, setIncomeDate] = useState('');
+    const [incomeFilterMode, setIncomeFilterMode] = useState<'All' | 'Today' | 'Weekly' | 'Monthly' | 'Custom'>('All');
 
     useEffect(() => {
         if (selectedCase) {
-            setConsultationFee(selectedCase.consultationFee?.toString() || '');
-            setCaseFee(selectedCase.caseFee?.toString() || '');
+            // If fee is 0, set to empty string so placeholder '0' shows
+            const cFee = selectedCase.consultationFee || 0;
+            const csFee = selectedCase.caseFee || 0;
+            setConsultationFee(cFee === 0 ? '' : cFee.toString());
+            setCaseFee(csFee === 0 ? '' : csFee.toString());
         } else {
             setConsultationFee('');
             setCaseFee('');
@@ -68,12 +81,14 @@ const AdminDashboard: React.FC = () => {
     const loadData = async () => {
         setIsLoading(true);
         try {
-            const [appData, lawyerData] = await Promise.all([
+            const [appData, lawyerData, payData] = await Promise.all([
                 getAppointments(),
-                getLawyers()
+                getLawyers(),
+                getPaymentHistory()
             ]);
             setAppointments(appData);
             setLawyers(lawyerData);
+            setPaymentHistory(payData);
         } finally {
             setIsLoading(false);
         }
@@ -92,7 +107,6 @@ const AdminDashboard: React.FC = () => {
             if (status === 'Approved') {
                 const lawyer = lawyers.find(l => l.id === selectedLawyerId);
 
-                // Department-based Sequential Case ID Generation
                 const category = selectedCase.caseCategory;
                 const prefixMap: Record<string, string> = {
                     'Civil': 'CIV',
@@ -140,7 +154,7 @@ const AdminDashboard: React.FC = () => {
         }
     };
 
-    const handleUpdateFees = async () => {
+    const handlePaymentUpdate = async () => {
         if (!selectedCase) return;
 
         setIsProcessing(true);
@@ -148,17 +162,85 @@ const AdminDashboard: React.FC = () => {
             const cFee = parseFloat(consultationFee) || 0;
             const csFee = parseFloat(caseFee) || 0;
 
-            await updateAppointmentFees(selectedCase.id, cFee, csFee);
+            const txnInfo = paymentMode === 'Online' ? transactionId :
+                paymentMode === 'Cheque' ? `${bankName} - ${chequeNumber}` : '';
+
+            await updateAppointmentPayment(
+                selectedCase.id,
+                cFee,
+                csFee,
+                paymentMode,
+                txnInfo,
+                selectedCase.fullName,
+                selectedCase.caseId || `BK-${selectedCase.id.slice(-6).toUpperCase()}`
+            );
             await loadData();
 
-            setSelectedCase(prev => prev ? { ...prev, consultationFee: cFee, caseFee: csFee } : null);
-            alert('Fees updated successfully!');
-        } catch (error) {
-            console.error('Failed to update fees:', error);
-            alert('Operation failed. Please try again.');
+            setSelectedCase(prev => prev ? {
+                ...prev,
+                consultationFee: cFee,
+                caseFee: csFee
+            } : null);
+
+            alert('Payment recorded successfully!');
+        } catch (error: any) {
+            console.error('Full Payment Error:', error);
+            const errorMsg = error.message || error.details || 'Unknown Error';
+            alert(`Database Error: ${errorMsg}\n\nPlease ensure you have run the latest SQL in Supabase.`);
         } finally {
             setIsProcessing(false);
         }
+    };
+
+    const downloadCSV = (type: 'Today' | 'Weekly' | 'Monthly' | 'Custom') => {
+        const now = new Date();
+        let filtered = [...paymentHistory];
+
+        if (type === 'Today') {
+            const todayStr = now.toISOString().split('T')[0];
+            filtered = filtered.filter(p => p.paymentDate?.startsWith(todayStr));
+        } else if (type === 'Weekly') {
+            const lastWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            filtered = filtered.filter(p => new Date(p.paymentDate) >= lastWeek);
+        } else if (type === 'Monthly') {
+            const lastMonth = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+            filtered = filtered.filter(p => new Date(p.paymentDate) >= lastMonth);
+        } else if (type === 'Custom' && incomeDate) {
+            filtered = filtered.filter(p => p.paymentDate?.startsWith(incomeDate));
+        }
+
+        if (filtered.length === 0) {
+            alert(`No payment records found for ${type}`);
+            return;
+        }
+
+        const headers = ['Case ID', 'Client Name', 'Consultation Fee', 'Due Fee', 'Total Amount', 'Payment Mode', 'Payment Date', 'Transaction Details'];
+        const rows = filtered.map(p => [
+            p.caseId,
+            p.clientName,
+            p.consultationFee,
+            p.dueFee,
+            p.amount,
+            p.paymentMode,
+            new Date(p.paymentDate).toLocaleDateString(),
+            p.transactionId || 'N/A'
+        ]);
+
+        const csvContent = [
+            headers.join(','),
+            ...rows.map(row => row.join(','))
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        const fileName = type === 'Custom' ? `Payment_Report_${incomeDate}.csv` : `Payment_Report_${type}_${now.toISOString().split('T')[0]}.csv`;
+        link.setAttribute('download', fileName);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     };
 
     const handleUpdateStage = async (newStage: string) => {
@@ -189,17 +271,12 @@ const AdminDashboard: React.FC = () => {
         return matchesSearch && matchesDate;
     });
 
-    const handleSearchReset = () => setSearchQuery('');
-    const handleDateReset = () => {
-        setSearchDate('');
-        setAppliedDate('');
-    };
-
     const columns = {
         pending: filteredData.filter(a => a.status === 'Pending'),
-        verified: filteredData.filter(a => a.status === 'Approved'),
-        payment: filteredData.filter(a => a.status === 'Approved' && a.consultationFee === 0 && a.caseFee === 0),
+        verified: filteredData.filter(a => a.status === 'Approved' && !a.lawyerId),
+        payment: filteredData.filter(a => a.status === 'Approved' && a.lawyerId && a.consultationFee === 0 && a.caseFee === 0),
         litigation: filteredData.filter(a => a.status === 'Approved' && (a.consultationFee > 0 || a.caseFee > 0)),
+        history: filteredData.filter(a => a.paymentDate),
         rejected: filteredData.filter(a => a.status === 'Rejected')
     };
 
@@ -241,14 +318,13 @@ const AdminDashboard: React.FC = () => {
 
     return (
         <div className="min-h-screen bg-slate-50 relative overflow-x-hidden">
-            {/* Top Navigation */}
             <nav className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-slate-200">
                 <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
                     <div className="flex items-center gap-4">
                         <div className="bg-slate-900 p-2 rounded-xl shadow-lg shadow-slate-900/20">
                             <LegalLogo className="h-6 w-6 text-white" />
                         </div>
-                        <div className="">
+                        <div>
                             <h1 className="text-sm font-black text-slate-900 uppercase tracking-tighter">Admin Dashboard</h1>
                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Manage Appointments</p>
                         </div>
@@ -287,11 +363,12 @@ const AdminDashboard: React.FC = () => {
                             className="w-full pl-11 pr-11 py-3.5 bg-white border border-slate-200 rounded-2xl text-sm font-bold shadow-sm outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
                         />
                         {searchQuery && (
-                            <button onClick={handleSearchReset} className="absolute right-4 top-1/2 -translate-y-1/2 p-1.5 hover:bg-slate-100 rounded-lg text-slate-400">
+                            <button onClick={() => setSearchQuery('')} className="absolute right-4 top-1/2 -translate-y-1/2 p-1.5 hover:bg-slate-100 rounded-lg text-slate-400">
                                 <XCircle className="h-4 w-4" />
                             </button>
                         )}
                     </div>
+
                 </div>
 
                 <div className="flex items-center gap-3 p-2 bg-slate-200/50 rounded-3xl w-full sm:w-fit mb-10 overflow-x-auto hide-scrollbar">
@@ -299,6 +376,7 @@ const AdminDashboard: React.FC = () => {
                         { id: 'Inquiry', label: 'Inquiry', icon: ListTodo, bg: 'bg-slate-800' },
                         { id: 'Verified', label: 'Approved', icon: UserCheck, bg: 'bg-emerald-500' },
                         { id: 'Payment', label: 'Payment', icon: IndianRupee, bg: 'bg-amber-500' },
+                        { id: 'History', label: 'Income', icon: BarChart3, bg: 'bg-indigo-600' },
                         { id: 'Litigation', label: 'Ongoing', icon: ArrowRight, bg: 'bg-blue-500' },
                         { id: 'Disposed', label: 'Closed', icon: XCircle, bg: 'bg-red-500' }
                     ].map((stage) => (
@@ -316,8 +394,9 @@ const AdminDashboard: React.FC = () => {
                                 {stage.id === 'Inquiry' ? columns.pending.length :
                                     stage.id === 'Verified' ? columns.verified.length :
                                         stage.id === 'Payment' ? columns.payment.length :
-                                            stage.id === 'Litigation' ? columns.litigation.length :
-                                                columns.rejected.length}
+                                            stage.id === 'History' ? paymentHistory.length :
+                                                stage.id === 'Litigation' ? columns.litigation.length :
+                                                    columns.rejected.length}
                             </span>
                         </button>
                     ))}
@@ -327,6 +406,167 @@ const AdminDashboard: React.FC = () => {
                     {activeStage === 'Inquiry' && columns.pending.map(renderCard)}
                     {activeStage === 'Verified' && columns.verified.map(renderCard)}
                     {activeStage === 'Payment' && columns.payment.map(renderCard)}
+                    {activeStage === 'History' && (
+                        <div className="col-span-full space-y-6">
+                            <div className="flex items-center justify-between bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm">
+                                <div>
+                                    <h3 className="text-xl font-black text-slate-900">Income Overview</h3>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Detailed history of all manual payments received</p>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => { setIncomeFilterMode('Today'); setIncomeDate(''); }}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${incomeFilterMode === 'Today' ? 'bg-blue-600 text-white border-blue-600 shadow-lg' : 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100'}`}
+                                    >
+                                        Today
+                                    </button>
+                                    <button
+                                        onClick={() => { setIncomeFilterMode('Weekly'); setIncomeDate(''); }}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${incomeFilterMode === 'Weekly' ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100'}`}
+                                    >
+                                        Weekly
+                                    </button>
+                                    <button
+                                        onClick={() => { setIncomeFilterMode('Monthly'); setIncomeDate(''); }}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${incomeFilterMode === 'Monthly' ? 'bg-slate-900 text-white border-slate-900 shadow-lg' : 'bg-slate-50 text-slate-800 border-slate-200 hover:bg-slate-100'}`}
+                                    >
+                                        Monthly Report
+                                    </button>
+                                    {incomeFilterMode !== 'All' && (
+                                        <button
+                                            onClick={() => { setIncomeFilterMode('All'); setIncomeDate(''); }}
+                                            className="px-4 py-2 bg-red-50 text-red-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-100 transition-all border border-red-100"
+                                        >
+                                            Reset
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm">
+                                <div className="flex items-center gap-4 flex-1">
+                                    <div className="flex items-center gap-2">
+                                        <Calendar className="h-4 w-4 text-blue-600" />
+                                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Search by Date:</span>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="date"
+                                            value={incomeDate}
+                                            onChange={(e) => { setIncomeDate(e.target.value); setIncomeFilterMode('Custom'); }}
+                                            className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500/20"
+                                        />
+                                    </div>
+                                </div>
+
+                                {incomeFilterMode !== 'All' && (
+                                    <div className="flex items-center gap-3 animate-in fade-in slide-in-from-right-2 duration-300">
+                                        <div className="text-right mr-2">
+                                            <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Viewing Preview</p>
+                                            <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Review the data below before download</p>
+                                        </div>
+                                        <button
+                                            onClick={() => downloadCSV(incomeFilterMode)}
+                                            className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20 active:scale-95"
+                                        >
+                                            <Download className="h-4 w-4" />
+                                            Download CSV
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead>
+                                            <tr className="bg-slate-50/50">
+                                                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Case ID</th>
+                                                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Client Name</th>
+                                                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Consultation</th>
+                                                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Due Fee</th>
+                                                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Total</th>
+                                                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Mode</th>
+                                                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Date</th>
+                                                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Details</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-50">
+                                            {paymentHistory
+                                                .filter(pay => {
+                                                    const now = new Date();
+                                                    if (incomeFilterMode === 'Today') {
+                                                        const todayStr = now.toISOString().split('T')[0];
+                                                        return pay.paymentDate?.startsWith(todayStr);
+                                                    }
+                                                    if (incomeFilterMode === 'Weekly') {
+                                                        const lastWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                                                        return new Date(pay.paymentDate) >= lastWeek;
+                                                    }
+                                                    if (incomeFilterMode === 'Monthly') {
+                                                        const lastMonth = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                                                        return new Date(pay.paymentDate) >= lastMonth;
+                                                    }
+                                                    if (incomeFilterMode === 'Custom' && incomeDate) {
+                                                        return pay.paymentDate?.startsWith(incomeDate);
+                                                    }
+                                                    return true; // All mode
+                                                })
+                                                .map((pay) => (
+                                                    <tr key={pay.id} className="hover:bg-blue-50/30 transition-colors group">
+                                                        <td className="px-6 py-4">
+                                                            <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">{pay.caseId}</span>
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <p className="text-xs font-bold text-slate-800">{pay.clientName}</p>
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <span className="text-xs font-black text-slate-900 flex items-center gap-1">
+                                                                <IndianRupee className="h-3 w-3 text-blue-500" />
+                                                                {pay.consultationFee}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <span className="text-xs font-black text-slate-900 flex items-center gap-1">
+                                                                <IndianRupee className="h-3 w-3 text-blue-500" />
+                                                                {pay.dueFee}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <span className="text-xs font-black text-emerald-600 flex items-center gap-1">
+                                                                <IndianRupee className="h-3 w-3" />
+                                                                {pay.amount}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <span className={`text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider ${pay.paymentMode === 'Cash' ? 'bg-emerald-100 text-emerald-600' :
+                                                                pay.paymentMode === 'Online' ? 'bg-blue-100 text-blue-600' :
+                                                                    'bg-amber-100 text-amber-600'
+                                                                }`}>
+                                                                {pay.paymentMode}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <span className="text-xs font-bold text-slate-600">
+                                                                {new Date(pay.paymentDate).toLocaleDateString()}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <p className="text-[10px] text-slate-500 font-medium line-clamp-1 truncate w-32">{pay.transactionId || 'No extra info'}</p>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                {paymentHistory.length === 0 && (
+                                    <div className="py-20 text-center border-t border-slate-50 bg-slate-50/30">
+                                        <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">No transaction history found</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
                     {activeStage === 'Litigation' && (
                         <div className="col-span-full space-y-6">
                             <div className="flex items-center gap-2 overflow-x-auto pb-4 hide-scrollbar">
@@ -358,6 +598,7 @@ const AdminDashboard: React.FC = () => {
                     {((activeStage === 'Inquiry' && columns.pending.length === 0) ||
                         (activeStage === 'Verified' && columns.verified.length === 0) ||
                         (activeStage === 'Payment' && columns.payment.length === 0) ||
+                        (activeStage === 'History' && paymentHistory.length === 0) ||
                         (activeStage === 'Disposed' && columns.rejected.length === 0)) && (
                             <div className="col-span-full py-20 text-center border-2 border-dashed border-slate-200 rounded-3xl bg-white/50">
                                 <p className="text-sm font-bold text-slate-400 uppercase tracking-widest text-center">No records found</p>
@@ -390,209 +631,212 @@ const AdminDashboard: React.FC = () => {
                         <div className="flex-1 overflow-y-auto p-8 space-y-10">
                             {activeStage === 'Payment' ? (
                                 <div className="space-y-6">
-                                    <div className="bg-blue-50/50 p-8 rounded-[2rem] border-2 border-blue-50/50 space-y-8">
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="p-5 bg-white rounded-2xl border border-blue-100 shadow-sm">
-                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Consultation</p>
-                                                <div className="relative mt-1">
-                                                    <IndianRupee className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-500" />
-                                                    <input
-                                                        type="number"
-                                                        value={consultationFee}
-                                                        onChange={(e) => setConsultationFee(e.target.value)}
-                                                        className="w-full pl-6 bg-transparent border-none text-xl font-black text-slate-900 outline-none p-0"
-                                                        placeholder="0"
-                                                    />
+                                    <div className="bg-slate-50/50 p-6 rounded-[2.5rem] border-2 border-slate-100 space-y-10">
+                                        <div className="space-y-6">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 bg-amber-100 rounded-xl flex items-center justify-center">
+                                                    <Clock className="h-4 w-4 text-amber-600" />
                                                 </div>
+                                                <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-[0.2em]">1. Fee Allocation</h4>
                                             </div>
-                                            <div className="p-5 bg-white rounded-2xl border border-blue-100 shadow-sm">
-                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Due Fee</p>
-                                                <div className="relative mt-1">
-                                                    <IndianRupee className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-500" />
-                                                    <input
-                                                        type="number"
-                                                        value={caseFee}
-                                                        onChange={(e) => setCaseFee(e.target.value)}
-                                                        className="w-full pl-6 bg-transparent border-none text-xl font-black text-slate-900 outline-none p-0"
-                                                        placeholder="0"
-                                                    />
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-sm">
+                                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Consultation Fee</p>
+                                                    <div className="relative mt-1">
+                                                        <IndianRupee className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-500" />
+                                                        <input
+                                                            type="number"
+                                                            value={consultationFee}
+                                                            onChange={(e) => setConsultationFee(e.target.value)}
+                                                            className="w-full pl-6 bg-transparent border-none text-xl font-black text-slate-900 outline-none p-0 placeholder:text-slate-300 pointer-events-auto"
+                                                            placeholder="0"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-sm">
+                                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Due Fee</p>
+                                                    <div className="relative mt-1">
+                                                        <IndianRupee className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-500" />
+                                                        <input
+                                                            type="number"
+                                                            value={caseFee}
+                                                            onChange={(e) => setCaseFee(e.target.value)}
+                                                            className="w-full pl-6 bg-transparent border-none text-xl font-black text-slate-900 outline-none p-0 placeholder:text-slate-300 pointer-events-auto"
+                                                            placeholder="0"
+                                                        />
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <div className="space-y-4">
-                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Payment Mode</p>
-                                            <div className="grid grid-cols-3 gap-2">
-                                                {['Cash', 'Online', 'Cheque'].map((mode) => (
-                                                    <button
-                                                        key={mode}
-                                                        onClick={() => setPaymentMode(mode)}
-                                                        className={`py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${paymentMode === mode ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'bg-white text-slate-500 border border-slate-100'}`}
-                                                    >
-                                                        {mode}
-                                                    </button>
-                                                ))}
+                                        <div className="space-y-6">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 bg-blue-100 rounded-xl flex items-center justify-center">
+                                                    <IndianRupee className="h-4 w-4 text-blue-600" />
+                                                </div>
+                                                <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-[0.2em]">2. Transaction Information</h4>
+                                            </div>
+                                            <div className="space-y-4">
+                                                <div className="flex items-center justify-between px-1">
+                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Payment Mode</p>
+                                                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wide transition-all ${paymentMode === 'Cash' ? 'bg-emerald-100 text-emerald-600' :
+                                                        paymentMode === 'Online' ? 'bg-blue-100 text-blue-600' :
+                                                            'bg-amber-100 text-amber-600'
+                                                        }`}>
+                                                        {paymentMode} Selected
+                                                    </span>
+                                                </div>
+
+                                                <div className="bg-white p-1.5 rounded-[2rem] border-2 border-slate-100 flex gap-1 shadow-inner relative overflow-hidden">
+                                                    {[
+                                                        { id: 'Cash', icon: Banknote, activeClass: 'bg-emerald-600 text-white shadow-emerald-200' },
+                                                        { id: 'Online', icon: Smartphone, activeClass: 'bg-blue-600 text-white shadow-blue-200' },
+                                                        { id: 'Cheque', icon: Wallet, activeClass: 'bg-amber-600 text-white shadow-amber-200' }
+                                                    ].map((mode) => (
+                                                        <button
+                                                            key={mode.id}
+                                                            onClick={() => setPaymentMode(mode.id)}
+                                                            className={`flex-1 flex items-center justify-center gap-2 py-4 rounded-[1.5rem] transition-all duration-500 relative z-10 ${paymentMode === mode.id
+                                                                ? `${mode.activeClass} shadow-lg scale-[1.02]`
+                                                                : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
+                                                                }`}
+                                                        >
+                                                            <mode.icon className={`h-4 w-4 transition-transform duration-500 ${paymentMode === mode.id ? 'scale-110' : ''}`} />
+                                                            <span className="text-[10px] font-black uppercase tracking-widest">{mode.id}</span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            <div className="bg-white p-6 rounded-2xl border border-blue-100 space-y-5">
+                                                {paymentMode === 'Cash' && (
+                                                    <div className="space-y-1.5">
+                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Receipt Number (Optional)</label>
+                                                        <input type="text" placeholder="e.g. REC-12345" className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" />
+                                                    </div>
+                                                )}
+                                                {paymentMode === 'Online' && (
+                                                    <div className="space-y-4">
+                                                        <div className="bg-blue-50/50 p-6 rounded-3xl border border-blue-100 flex flex-col items-center gap-4 relative overflow-hidden group">
+                                                            <div className="absolute inset-0 bg-blue-600/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                            <div className="w-44 h-44 bg-white p-3 rounded-2xl border-2 border-slate-100 shadow-xl flex items-center justify-center relative overlow-hidden">
+                                                                <img src="/qr-code.png" alt="Payment QR" className="w-full h-full object-contain" />
+                                                                <div className="absolute top-0 left-0 w-full h-[2px] bg-blue-500 shadow-[0_0_10px_#3b82f6] animate-[scan_2s_infinite_linear]" />
+                                                            </div>
+                                                            <div className="text-center relative z-10">
+                                                                <p className="text-[12px] font-black text-slate-800 uppercase tracking-[0.2em] mb-1">Scan QR to Pay</p>
+                                                                <p className="text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-100 inline-block">UPI: legal.office@paytm</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="space-y-1.5">
+                                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Transaction ID</label>
+                                                            <input
+                                                                type="text"
+                                                                value={transactionId}
+                                                                onChange={(e) => setTransactionId(e.target.value)}
+                                                                placeholder="Enter Reference Number"
+                                                                className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500/10 transition-all"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {paymentMode === 'Cheque' && (
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <div className="space-y-1.5">
+                                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Cheque No</label>
+                                                            <input type="text" value={chequeNumber} onChange={(e) => setChequeNumber(e.target.value)} className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" />
+                                                        </div>
+                                                        <div className="space-y-1.5">
+                                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Bank Name</label>
+                                                            <input type="text" value={bankName} onChange={(e) => setBankName(e.target.value)} className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" />
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
-
-                                        <button
-                                            onClick={handleUpdateFees}
-                                            disabled={isProcessing}
-                                            className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all shadow-xl disabled:opacity-50"
-                                        >
-                                            {isProcessing ? 'Processing...' : `Mark as Paid (${paymentMode})`}
-                                        </button>
                                     </div>
+
+                                    <button
+                                        onClick={handlePaymentUpdate}
+                                        disabled={isProcessing}
+                                        className="w-full py-5 bg-slate-900 text-white rounded-[2rem] font-black text-[10px] uppercase tracking-[0.2em] shadow-xl disabled:opacity-50"
+                                    >
+                                        {isProcessing ? 'Processing...' : `Confirm Transaction (${paymentMode})`}
+                                    </button>
                                 </div>
                             ) : (
-                                <>
+                                <div className="space-y-8">
                                     <div className="grid grid-cols-2 gap-8">
                                         <div className="space-y-1">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Full Name</p>
+                                            <p className="font-bold text-slate-800 text-sm">{selectedCase.fullName}</p>
+                                        </div>
+                                        <div className="space-y-1 text-right">
                                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Contact</p>
-                                            <p className="font-bold text-slate-800 text-sm flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-blue-500" /> {selectedCase.phoneNumber}</p>
+                                            <p className="font-bold text-slate-800 text-sm">{selectedCase.phoneNumber}</p>
                                         </div>
-                                        <div className="space-y-1">
+                                        <div className="col-span-2 space-y-1">
                                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email</p>
-                                            <p className="font-bold text-slate-800 text-sm flex items-center gap-2 truncate"><Mail className="h-3.5 w-3.5 text-blue-500" /> {selectedCase.emailId}</p>
-                                        </div>
-                                        <div className="space-y-1">
-                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</p>
-                                            <p className="font-bold text-slate-800 text-sm flex items-center gap-2"><Calendar className="h-3.5 w-3.5 text-blue-500" /> {selectedCase.appointmentDate}</p>
-                                        </div>
-                                        <div className="space-y-1">
-                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Time</p>
-                                            <p className="font-bold text-slate-800 text-sm flex items-center gap-2"><Clock className="h-3.5 w-3.5 text-blue-500" /> {selectedCase.timeSlot}</p>
+                                            <p className="font-bold text-slate-800 text-sm">{selectedCase.emailId}</p>
                                         </div>
                                     </div>
 
                                     <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 space-y-4">
                                         <div className="flex gap-2">
                                             <span className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-[9px] font-black text-slate-600 uppercase tracking-wider">{selectedCase.caseCategory}</span>
-                                            <span className="px-3 py-1 bg-blue-50 text-blue-600 border border-blue-100 rounded-lg text-[9px] font-black uppercase tracking-wider">{selectedCase.consultationType}</span>
                                         </div>
-                                        <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-wrap italic">"{selectedCase.description}"</p>
+                                        <div className="space-y-2">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Description</p>
+                                            <p className="text-slate-600 text-sm italic">"{selectedCase.description}"</p>
+                                        </div>
                                     </div>
 
                                     {selectedCase.status === 'Pending' && (
-                                        <div className="space-y-6">
-                                            <p className="text-[10px] font-black text-slate-800 uppercase tracking-widest text-center border-b border-slate-100 pb-4">Assign Professional</p>
-                                            <div className="grid grid-cols-1 gap-3">
-                                                {lawyers.map((lawyer) => (
+                                        <div className="space-y-4">
+                                            <p className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Assign Lawyer</p>
+                                            <div className="grid grid-cols-1 gap-2">
+                                                {lawyers.map(l => (
                                                     <button
-                                                        key={lawyer.id}
-                                                        onClick={() => setSelectedLawyerId(lawyer.id)}
-                                                        className={`flex items-center gap-4 p-4 rounded-2xl border-2 transition-all text-left ${selectedLawyerId === lawyer.id ? 'border-blue-600 bg-blue-50/50' : 'border-slate-100 hover:bg-slate-50'}`}
+                                                        key={l.id}
+                                                        onClick={() => setSelectedLawyerId(l.id)}
+                                                        className={`p-4 rounded-2xl border-2 text-left transition-all ${selectedLawyerId === l.id ? 'border-blue-600 bg-blue-50' : 'border-slate-100'}`}
                                                     >
-                                                        <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-200"><img src={lawyer.imageUrl} className="w-full h-full object-cover" /></div>
-                                                        <div className="flex-1">
-                                                            <h5 className="text-sm font-black text-slate-900 truncate">{lawyer.name}</h5>
-                                                            <p className="text-[9px] font-bold text-blue-600 uppercase tracking-wider">{lawyer.specialization}</p>
-                                                        </div>
-                                                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${selectedLawyerId === lawyer.id ? 'border-blue-600 bg-blue-600' : 'border-slate-200'}`}>
-                                                            {selectedLawyerId === lawyer.id && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                                                        </div>
+                                                        <p className="text-sm font-black text-slate-900">{l.name}</p>
+                                                        <p className="text-[9px] font-bold text-blue-600 uppercase">{l.specialization}</p>
                                                     </button>
                                                 ))}
                                             </div>
                                         </div>
                                     )}
 
-                                    {selectedCase.status === 'Approved' && activeStage !== 'Litigation' && (
-                                        <div className="space-y-6">
-                                            <p className="text-[10px] font-black text-slate-800 uppercase tracking-widest text-center border-b border-slate-100 pb-4">Financial Setup</p>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div className="space-y-2">
-                                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Consultation</label>
-                                                    <div className="relative">
-                                                        <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                                                        <input type="number" value={consultationFee} onChange={(e) => setConsultationFee(e.target.value)} placeholder="0" className="w-full pl-9 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/10" />
-                                                    </div>
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Legal Case Fee</label>
-                                                    <div className="relative">
-                                                        <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                                                        <input type="number" value={caseFee} onChange={(e) => setCaseFee(e.target.value)} placeholder="0" className="w-full pl-9 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/10" />
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <button onClick={handleUpdateFees} disabled={isProcessing} className="w-full py-4 bg-slate-800 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-900 transition-all shadow-lg shadow-slate-900/10 disabled:opacity-50">
-                                                Update Financials
-                                            </button>
-                                        </div>
-                                    )}
-
                                     {activeStage === 'Litigation' && (
-                                        <div className="space-y-8">
-                                            <div className="flex items-center gap-3">
-                                                <div className="h-px bg-blue-100 flex-1" />
-                                                <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest text-center">Litigation Tracking</span>
-                                                <div className="h-px bg-blue-100 flex-1" />
-                                            </div>
-
-                                            <div className="bg-slate-900 rounded-[2rem] p-8 text-white space-y-6">
-                                                <div className="flex items-center justify-between">
-                                                    <div>
-                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Current Progress</p>
-                                                        <h4 className="text-2xl font-black text-blue-400">{selectedCase.caseStage || 'Stage 1'}</h4>
-                                                    </div>
-                                                    <div className="bg-blue-500/20 p-3 rounded-2xl">
-                                                        <ArrowRight className="h-6 w-6 text-blue-400" />
-                                                    </div>
-                                                </div>
-
-                                                <div className="grid grid-cols-2 gap-2">
-                                                    {['Stage 1', 'Stage 2', 'Stage 3', 'Final Verdict'].map((stg) => (
-                                                        <button
-                                                            key={stg}
-                                                            onClick={() => handleUpdateStage(stg)}
-                                                            className={`py-2 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all ${selectedCase.caseStage === stg
-                                                                    ? 'bg-blue-600 border-none'
-                                                                    : 'bg-white/5 border border-white/10 hover:bg-white/10'
-                                                                }`}
-                                                        >
-                                                            {stg}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-
-                                            <div className="bg-blue-50/50 p-6 rounded-3xl border border-blue-100/50 space-y-4">
-                                                <div className="flex items-center justify-between">
-                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Financial Summary</p>
-                                                    <span className="bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest">Verified Paid</span>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    <div className="bg-white p-4 rounded-2xl border border-blue-50">
-                                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Consultation</p>
-                                                        <div className="flex items-center gap-2 text-lg font-black text-slate-900">
-                                                            <IndianRupee className="h-3.5 w-3.5 text-blue-500" />
-                                                            {selectedCase.consultationFee}
-                                                        </div>
-                                                    </div>
-                                                    <div className="bg-white p-4 rounded-2xl border border-blue-50">
-                                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Litigation Fee</p>
-                                                        <div className="flex items-center gap-2 text-lg font-black text-slate-900">
-                                                            <IndianRupee className="h-3.5 w-3.5 text-blue-500" />
-                                                            {selectedCase.caseFee}
-                                                        </div>
-                                                    </div>
-                                                </div>
+                                        <div className="space-y-6">
+                                            <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Track Litigation</p>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {['Stage 1', 'Stage 2', 'Stage 3', 'Final Verdict'].map(stg => (
+                                                    <button
+                                                        key={stg}
+                                                        onClick={() => handleUpdateStage(stg)}
+                                                        className={`py-3 rounded-xl text-[9px] font-black uppercase transition-all ${selectedCase.caseStage === stg ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}
+                                                    >
+                                                        {stg}
+                                                    </button>
+                                                ))}
                                             </div>
                                         </div>
                                     )}
-                                </>
+                                </div>
                             )}
                         </div>
 
-                        <div className="p-8 border-t border-slate-100">
+                        <div className="p-8 border-t border-slate-100 flex gap-4">
                             {selectedCase.status === 'Pending' ? (
-                                <div className="flex gap-4">
-                                    <button onClick={() => handleStatusUpdate(selectedCase.id, 'Rejected')} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-50 hover:text-red-600 transition-all">Reject</button>
-                                    <button onClick={() => handleStatusUpdate(selectedCase.id, 'Approved')} className="flex-[2] py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-blue-600/20 hover:bg-blue-700 transition-all">Approve Case</button>
-                                </div>
+                                <>
+                                    <button onClick={() => handleStatusUpdate(selectedCase.id, 'Rejected')} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-[10px] uppercase">Reject</button>
+                                    <button onClick={() => handleStatusUpdate(selectedCase.id, 'Approved')} className="flex-[2] py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase shadow-xl">Approve</button>
+                                </>
                             ) : (
-                                <button onClick={() => setSelectedCase(null)} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest">Close Viewer</button>
+                                <button onClick={() => setSelectedCase(null)} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase">Close Viewer</button>
                             )}
                         </div>
                     </div>

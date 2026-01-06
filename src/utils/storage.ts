@@ -20,6 +20,9 @@ export interface AppointmentRecord {
     lawyerId?: string;
     caseId?: string;
     caseStage?: string;
+    paymentMode?: string;
+    transactionId?: string;
+    paymentDate?: string;
     status: 'Pending' | 'Approved' | 'Rejected';
     createdAt: string;
 }
@@ -31,6 +34,19 @@ export interface Lawyer {
     experience: string;
     rating: number;
     imageUrl: string;
+}
+
+export interface PaymentRecord {
+    id: string;
+    appointmentId: string;
+    caseId: string;
+    clientName: string;
+    consultationFee: number;
+    dueFee: number;
+    amount: number;
+    paymentMode: string;
+    transactionId: string;
+    paymentDate: string;
 }
 
 export const getLawyers = async (): Promise<Lawyer[]> => {
@@ -144,6 +160,66 @@ export const updateAppointmentFees = async (id: string, consultationFee: number,
     }
 };
 
+export const updateAppointmentPayment = async (id: string, consultationFee: number, caseFee: number, paymentMode: string, transactionId: string, clientName: string, caseId: string) => {
+    // 1. Update appointment fees
+    const { error: appError } = await supabase
+        .from('appointments')
+        .update({
+            consultation_fee: consultationFee,
+            case_fee: caseFee
+        })
+        .eq('id', id);
+
+    if (appError) {
+        console.error('App Update Error:', appError);
+        throw appError;
+    }
+
+    // 2. Insert into payments table
+    const { error: payError } = await supabase
+        .from('payments')
+        .insert([{
+            appointment_id: id,
+            case_id: caseId,
+            client_name: clientName,
+            consultation_fee: consultationFee,
+            due_fee: caseFee,
+            amount: consultationFee + caseFee,
+            payment_mode: paymentMode,
+            transaction_id: transactionId
+        }]);
+
+    if (payError) {
+        console.error('Payment Insert Error:', payError);
+        throw payError;
+    }
+};
+
+export const getPaymentHistory = async (): Promise<PaymentRecord[]> => {
+    const { data, error } = await supabase
+        .from('payments')
+        .select('*')
+        .order('payment_date', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching payments:', error);
+        return [];
+    }
+
+    return (data || []).map(row => ({
+        id: row.id,
+        appointmentId: row.appointment_id,
+        caseId: row.case_id,
+        clientName: row.client_name,
+        consultationFee: Number(row.consultation_fee || 0),
+        dueFee: Number(row.due_fee || 0),
+        amount: Number(row.amount),
+        paymentMode: row.payment_mode,
+        transactionId: row.transaction_id,
+        paymentDate: row.payment_date
+    }));
+};
+
 export const updateCaseId = async (id: string, caseId: string) => {
     const { error } = await supabase
         .from('appointments')
@@ -184,7 +260,10 @@ const mapToSnakeCase = (app: any) => ({
     other_category: app.otherCategory,
     description: app.description,
     case_id: app.caseId,
-    case_stage: app.caseStage
+    case_stage: app.caseStage,
+    payment_mode: app.paymentMode,
+    transaction_id: app.transactionId,
+    payment_date: app.paymentDate
 });
 
 const mapToCamelCase = (row: any): AppointmentRecord => ({
@@ -207,6 +286,9 @@ const mapToCamelCase = (row: any): AppointmentRecord => ({
     lawyerId: row.lawyer_id,
     caseId: row.case_id,
     caseStage: row.case_stage || 'Stage 1',
+    paymentMode: row.payment_mode,
+    transactionId: row.transaction_id,
+    paymentDate: row.payment_date,
     status: row.status,
     createdAt: row.created_at
 });
