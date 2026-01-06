@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS lawyers (
     experience TEXT NOT NULL,
     rating NUMERIC DEFAULT 5.0,
     image_url TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT unique_lawyer_name UNIQUE (name)
 );
 
 -- 3. CREATE APPOINTMENTS TABLE

@@ -9,7 +9,8 @@ CREATE TABLE IF NOT EXISTS lawyers (
     experience TEXT NOT NULL,
     rating NUMERIC DEFAULT 5.0,
     image_url TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT unique_lawyer_name UNIQUE (name)
 );
 
 -- 2. Add lawyer_id column to appointments table

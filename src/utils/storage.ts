@@ -59,7 +59,7 @@ export const getLawyers = async (): Promise<Lawyer[]> => {
         return [];
     }
 
-    return (data || []).map(row => ({
+    const lawyers = (data || []).map(row => ({
         id: row.id,
         name: row.name,
         specialization: row.specialization,
@@ -67,6 +67,11 @@ export const getLawyers = async (): Promise<Lawyer[]> => {
         rating: Number(row.rating),
         imageUrl: row.image_url
     }));
+
+    // Deduplicate by name to handle cases where the setup SQL was run multiple times
+    return lawyers.filter((lawyer, index, self) =>
+        index === self.findIndex((t) => t.name === lawyer.name)
+    );
 };
 
 export const assignLawyer = async (appointmentId: string, lawyerId: string) => {
