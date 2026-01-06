@@ -38,21 +38,21 @@ const Reports: React.FC = () => {
     return (
         <div className="space-y-12 pb-20 animate-in fade-in slide-in-from-bottom-4 duration-700">
             {/* Header Section */}
-            <div className="bg-slate-900 rounded-[3rem] p-12 text-white relative overflow-hidden shadow-2xl mx-4 mt-4">
+            <div className="bg-slate-900 rounded-[2rem] sm:rounded-[3rem] p-8 sm:p-12 text-white relative overflow-hidden shadow-2xl mx-4 mt-4 transition-all">
                 <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-500/10 rounded-full blur-3xl -mr-40 -mt-40 pointer-events-none"></div>
-                <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                    <div>
-                        <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 border border-white/10 rounded-full text-blue-200 font-bold text-xs uppercase tracking-wider mb-4">
-                            <BarChart3 className="h-4 w-4" />
+                <div className="relative z-10 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+                    <div className="max-w-2xl">
+                        <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-white/10 border border-white/10 rounded-full text-blue-200 font-bold text-[10px] sm:text-xs uppercase tracking-wider mb-4">
+                            <BarChart3 className="h-3.5 sm:h-4 sm:w-4" />
                             <span>Legal Analytics Dashboard</span>
                         </div>
-                        <h1 className="text-4xl md:text-5xl font-black mb-4">Performance Insights</h1>
-                        <p className="text-slate-400 text-lg max-w-2xl">
+                        <h1 className="text-3xl sm:text-4xl md:text-5xl font-black mb-4 leading-tight">Performance Insights</h1>
+                        <p className="text-slate-400 text-sm sm:text-lg leading-relaxed">
                             Comprehensive data visualization for firm performance, case tracking, and financial growth.
                         </p>
                     </div>
-                    <button className="px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-bold flex items-center gap-2 transition-all shadow-xl shadow-blue-900/40">
-                        <Download className="h-5 w-5" />
+                    <button className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl sm:rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-xl shadow-blue-900/40 active:scale-95">
+                        <Download className="h-4.5 sm:h-5 sm:w-5" />
                         Export All Data
                     </button>
                 </div>
@@ -114,12 +114,12 @@ const Reports: React.FC = () => {
                     </div>
 
                     {/* Downloadable Reports */}
-                    <div className="bg-slate-50 p-8 rounded-[2.5rem] border border-slate-100">
+                    <div className="bg-slate-50 p-6 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] border border-slate-100 transition-all">
                         <div className="flex items-center gap-3 mb-6">
                             <div className="p-2 bg-white rounded-xl shadow-sm">
-                                <FileText className="h-6 w-6 text-slate-700" />
+                                <FileText className="h-5 w-5 sm:h-6 sm:w-6 text-slate-700" />
                             </div>
-                            <h3 className="text-xl font-bold text-slate-900">Archive & Downloads</h3>
+                            <h3 className="text-lg sm:text-xl font-bold text-slate-900">Archive & Downloads</h3>
                         </div>
 
                         <div className="space-y-4">

@@ -13,8 +13,7 @@ import {
     ClipboardList,
     Gavel,
     AlertCircle,
-    CheckCircle2,
-    X
+    CheckCircle2
 } from 'lucide-react';
 
 import { saveAppointment } from '../utils/storage';
@@ -110,7 +109,6 @@ const Appointment: React.FC = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (isSubmitting) return;
 
         if (validateForm()) {
             setIsSubmitting(true);
@@ -125,7 +123,7 @@ const Appointment: React.FC = () => {
                 setModal({
                     show: true,
                     title: 'Registration Successful!',
-                    message: 'Your appointment has been submitted successfully. Our legal team will review it and notify you via email shortly.',
+                    message: 'Your appointment has been submitted successfully. Please wait for the approved message through your mail. Our legal team will review it and notify you shortly.',
                     isError: false
                 });
 
@@ -209,25 +207,25 @@ const Appointment: React.FC = () => {
 
     return (
         <div className="max-w-5xl mx-auto">
-            <div className="mb-10 bg-slate-900 rounded-2xl p-8 md:p-12 text-white relative overflow-hidden shadow-xl">
+            <div className="mb-8 sm:mb-10 bg-slate-900 rounded-[1.5rem] sm:rounded-2xl p-6 sm:p-12 text-white relative overflow-hidden shadow-xl transition-all mx-4 sm:mx-0">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl -mr-20 -mt-20"></div>
                 <div className="relative z-10">
-                    <h1 className="text-4xl font-extrabold tracking-tight">Appointment</h1>
-                    <p className="text-slate-400 mt-3 text-lg max-w-2xl leading-relaxed">
+                    <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight">Appointment</h1>
+                    <p className="text-slate-400 mt-3 text-sm sm:text-lg max-w-2xl leading-relaxed">
                         Schedule and manage client consultations with our professional management system.
                         Please fill in the details below to secure your slot.
                     </p>
                 </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-8 pb-20">
+            <form onSubmit={handleSubmit} className="space-y-6 sm:space-y-8 pb-20 px-4 sm:px-0">
                 {/* Client Details Section */}
-                <section className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                    <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex items-center gap-2">
-                        <User className="h-5 w-5 text-slate-600" />
-                        <h2 className="text-lg font-semibold text-slate-800">Client Details</h2>
+                <section className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden transition-all">
+                    <div className="bg-slate-50 px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200 flex items-center gap-2">
+                        <User className="h-4.5 w-4.5 sm:h-5 sm:w-5 text-slate-600" />
+                        <h2 className="text-base sm:text-lg font-semibold text-slate-800 uppercase tracking-tight sm:normal-case">Client Details</h2>
                     </div>
-                    <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                         <div className="space-y-2">
                             <label className="text-sm font-medium text-slate-700">Full Name</label>
                             <div className="relative">
@@ -477,17 +475,17 @@ const Appointment: React.FC = () => {
                     </div>
                 </section>
 
-                <div className="flex items-center justify-end gap-4 pt-4">
+                <div className="flex flex-col sm:flex-row items-center justify-end gap-3 sm:gap-4 pt-4">
                     <button
                         type="button"
-                        className="px-6 py-2.5 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+                        className="w-full sm:w-auto px-6 py-3 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
                     >
                         Cancel
                     </button>
                     <button
                         type="submit"
                         disabled={isSubmitting}
-                        className={`flex items-center gap-2 px-8 py-2.5 rounded-lg text-sm font-bold text-white shadow-lg shadow-slate-200 transition-all hover:-translate-y-0.5 ${isSubmitting ? 'bg-slate-400 cursor-not-allowed' : 'bg-slate-900 hover:bg-slate-800'
+                        className={`w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-3 rounded-lg text-sm font-bold text-white shadow-lg shadow-slate-200 transition-all hover:-translate-y-0.5 ${isSubmitting ? 'bg-slate-400 cursor-not-allowed' : 'bg-slate-900 hover:bg-slate-800'
                             }`}
                     >
                         {isSubmitting ? 'Submitting...' : 'Submit Appointment'}
@@ -520,10 +518,15 @@ const Appointment: React.FC = () => {
                             )}
 
                             <button
-                                onClick={() => setModal(prev => ({ ...prev, show: false }))}
+                                onClick={() => {
+                                    setModal(prev => ({ ...prev, show: false }));
+                                    if (!modal.isError) {
+                                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                                    }
+                                }}
                                 className={`w-full mt-8 py-4 rounded-2xl font-bold text-white transition-all active:scale-95 shadow-lg ${modal.isError ? 'bg-red-600 hover:bg-red-700 shadow-red-200' : 'bg-slate-900 hover:bg-slate-800 shadow-slate-200'}`}
                             >
-                                {modal.isError ? 'Try Again' : 'Close Notification'}
+                                {modal.isError ? 'Try Again' : 'OK'}
                             </button>
                         </div>
                     </div>
