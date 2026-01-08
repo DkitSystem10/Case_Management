@@ -90,7 +90,7 @@ const CaseCounselling: React.FC = () => {
         {
             title: "Criminal Defense",
             description: "Aggressive representation to protect your rights and freedom.",
-            details: ["Bail Applications", "Criminal Litigation", "Defense Strategy Planning"],
+            details: ["Bail Applications", "Criminal Cases", "Defense Strategy Planning"],
             icon: ShieldAlert,
             image: "https://images.unsplash.com/photo-1589829085413-56de8ae18c73?auto=format&fit=crop&q=80&w=800"
         },
@@ -102,7 +102,7 @@ const CaseCounselling: React.FC = () => {
             image: "https://images.unsplash.com/photo-1497215728101-856f4ea42174?auto=format&fit=crop&q=80&w=800"
         },
         {
-            title: "Civil Litigation",
+            title: "Civil Cases",
             description: "Resolving non-criminal disputes with strong advocacy and negotiation.",
             details: ["Breach of Contract", "Debt Recovery Suits", "Damages & Compensation"],
             icon: Scale,

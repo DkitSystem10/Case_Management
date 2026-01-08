@@ -22,7 +22,7 @@ const Reports: React.FC = () => {
 
     const categoryDistribution = [
         { label: 'Criminal Defense', percentage: 35, color: 'bg-blue-500' },
-        { label: 'Civil Litigation', percentage: 25, color: 'bg-emerald-500' },
+        { label: 'Civil Cases', percentage: 25, color: 'bg-emerald-500' },
         { label: 'Family Law', percentage: 20, color: 'bg-amber-500' },
         { label: 'Corporate', percentage: 15, color: 'bg-purple-500' },
         { label: 'Others', percentage: 5, color: 'bg-slate-400' },
@@ -32,7 +32,7 @@ const Reports: React.FC = () => {
         { title: 'Monthly Case Efficiency Report', date: 'Oct 2024', size: '2.4 MB', type: 'PDF' },
         { title: 'Q3 Financial Revenue Analysis', date: 'Sep 2024', size: '1.8 MB', type: 'XLSX' },
         { title: 'Client Demographics Survey', date: 'Aug 2024', size: '4.2 MB', type: 'PDF' },
-        { title: 'Annual Litigation Summary', date: '2023-24', size: '8.5 MB', type: 'PDF' },
+        { title: 'Annual Case Summary', date: '2023-24', size: '8.5 MB', type: 'PDF' },
     ];
 
     return (

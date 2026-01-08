@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowRight, CheckCircle, Scale, Shield, Users, Globe, BookOpen } from 'lucide-react';
+import { ArrowRight, CheckCircle, Scale, Shield, Users, Globe, BookOpen, Clock } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 
 const Home: React.FC = () => {
@@ -37,7 +37,7 @@ const Home: React.FC = () => {
                             Streamline your legal practice with intelligent case tracking, client management, and automated reporting.
                             Designed for modern law firms demanding excellence.
                         </p>
-                        <div className="flex flex-col sm:flex-row gap-4">
+                        <div className="flex flex-col sm:flex-row gap-4 mb-6">
                             <NavLink to="/appointment" className="px-8 py-4 bg-blue-600 text-white rounded-xl font-bold text-lg hover:bg-blue-700 transition-all shadow-lg hover:shadow-blue-600/25 flex items-center justify-center gap-2">
                                 Book Consultation
                                 <ArrowRight className="h-5 w-5" />
@@ -46,6 +46,15 @@ const Home: React.FC = () => {
                                 <Globe className="h-5 w-5" />
                                 Explore Services
                             </button>
+                        </div>
+                        
+                        {/* Service Time Display */}
+                        <div className="inline-flex items-center gap-3 px-6 py-3 bg-white/15 backdrop-blur-md border border-white/30 rounded-xl shadow-lg">
+                            <Clock className="h-5 w-5 text-emerald-400" />
+                            <div className="flex flex-col">
+                                <span className="text-white font-semibold text-base">Service Hours</span>
+                                <span className="text-slate-200 text-sm">10 AM - 6 PM</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -58,8 +67,11 @@ const Home: React.FC = () => {
                             <p className="text-slate-300 text-sm">Case Success Rate</p>
                         </div>
                         <div>
-                            <p className="text-4xl font-bold text-emerald-400 mb-1">24/7</p>
-                            <p className="text-slate-300 text-sm">Client Support</p>
+                            <div className="flex items-center gap-2 mb-1">
+                                <Clock className="h-5 w-5 text-emerald-400" />
+                                <p className="text-2xl font-bold text-emerald-400">10-6</p>
+                            </div>
+                            <p className="text-slate-300 text-sm">Service Hours</p>
                         </div>
                         <div className="col-span-2 pt-4 border-t border-white/10">
                             <div className="flex items-center gap-3">
@@ -106,7 +118,7 @@ const Home: React.FC = () => {
                         LEX CONNECT provides comprehensive legal solutions tailored to your unique needs. Our team of specialized attorneys brings decades of experience to ensure the best possible outcome for your case.
                     </p>
                     <ul className="space-y-4">
-                        {['Criminal Defense & Litigation', 'Corporate & Business Law', 'Family & Estate Planning', 'Intellectual Property Rights'].map((item, i) => (
+                        {['Criminal Defense & Court Cases', 'Corporate & Business Law', 'Family & Estate Planning', 'Intellectual Property Rights'].map((item, i) => (
                             <li key={i} className="flex items-center gap-3 text-slate-700 font-medium">
                                 <div className="h-2 w-2 rounded-full bg-blue-500"></div>
                                 {item}

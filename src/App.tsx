@@ -11,29 +11,31 @@ import Reports from './pages/Reports';
 import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
 import PaymentPage from './pages/PaymentPage';
+import LawyerLogin from './pages/LawyerLogin';
 
 function AppContent() {
   const location = useLocation();
   const isAdminPath = location.pathname.startsWith('/admin');
+  const isLawyerPath = location.pathname.startsWith('/lawyer');
+  const isAppointmentPath = location.pathname === '/appointment';
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      {!isAdminPath && <Navbar />}
-      <main className={`flex-grow ${!isAdminPath ? 'container mx-auto py-6 px-4' : 'w-full h-screen h-svh'}`}>
+      {!isAdminPath && !isLawyerPath && !isAppointmentPath && <Navbar />}
+      <main className={`flex-grow ${!isAdminPath && !isLawyerPath && !isAppointmentPath ? 'container mx-auto py-6 px-4' : 'w-full h-screen h-svh'}`}>
         <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/appointment" element={<Appointment />} />
-          <Route path="/case-counselling" element={<CaseCounselling />} />
-          <Route path="/case-finder" element={<CaseFinder />} />
-          <Route path="/reports" element={<Reports />} />
+          <Route path="/lawyer/login" element={<LawyerLogin />} />
+          <Route path="/lawyer/case-finder" element={<CaseFinder />} />
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/admin/payment/:appointmentId" element={<PaymentPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="/appointment" element={<Appointment />} />
+          <Route path="/" element={<Navigate to="/lawyer/login" replace />} />
+          <Route path="*" element={<Navigate to="/lawyer/login" replace />} />
         </Routes>
       </main>
-      {!isAdminPath && <Footer />}
-      {!isAdminPath && <CallButton />}
+      {!isAdminPath && !isLawyerPath && !isAppointmentPath && <Footer />}
+      {!isAdminPath && !isLawyerPath && !isAppointmentPath && <CallButton />}
     </div>
   );
 }

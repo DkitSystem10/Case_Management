@@ -24,7 +24,8 @@ CREATE TABLE IF NOT EXISTS appointments (
     phone_number TEXT NOT NULL,
     email_id TEXT NOT NULL,
     address TEXT,
-    city TEXT,
+    city TEXT, -- District name
+    city_name TEXT, -- City name (optional)
     state TEXT,
     already_come TEXT CHECK (already_come IN ('Yes', 'No')) DEFAULT 'No',
     appointment_date DATE NOT NULL,
@@ -33,6 +34,8 @@ CREATE TABLE IF NOT EXISTS appointments (
     case_category TEXT NOT NULL,
     other_category TEXT,
     description TEXT,
+    document_url TEXT,
+    rejection_reason TEXT,
     -- Fee columns (kept for structural integrity, though UI handles demo)
     consultation_fee NUMERIC DEFAULT 0,
     case_fee NUMERIC DEFAULT 0,

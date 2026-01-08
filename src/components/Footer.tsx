@@ -82,7 +82,7 @@ const Footer: React.FC = () => {
                         <ul className="space-y-2 text-sm">
                             <li className="flex items-center gap-2">
                                 <span className="w-1 h-1 bg-blue-400 rounded-full"></span>
-                                Criminal Defense & Litigation
+                                Criminal Defense & Court Cases
                             </li>
                             <li className="flex items-center gap-2">
                                 <span className="w-1 h-1 bg-blue-400 rounded-full"></span>
