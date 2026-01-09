@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
     User,
     Phone,
@@ -10,6 +11,7 @@ import {
     Users,
     Briefcase,
     ChevronRight,
+    ChevronLeft,
     ClipboardList,
     Gavel,
     AlertCircle,
@@ -77,6 +79,7 @@ interface AppointmentFormData {
 }
 
 const Appointment: React.FC = () => {
+    const navigate = useNavigate();
     const [formData, setFormData] = useState<AppointmentFormData>({
         fullName: '',
         clientId: '',
@@ -319,6 +322,14 @@ const Appointment: React.FC = () => {
             <div className="mb-8 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 rounded-2xl p-8 text-white relative overflow-hidden shadow-2xl">
                 <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl -mr-48 -mt-48"></div>
                 <div className="relative z-10">
+                    {/* Back Button */}
+                    <button
+                        onClick={() => navigate('/admin')}
+                        className="flex items-center gap-2 mb-6 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl transition-all group text-sm font-bold uppercase tracking-widest backdrop-blur-sm border border-white/20"
+                    >
+                        <ChevronLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
+                        Back to Dashboard
+                    </button>
                     <h1 className="text-4xl font-black tracking-tight mb-3">Schedule Appointment</h1>
                     <p className="text-slate-300 text-lg max-w-2xl leading-relaxed">
                         Complete case registration form with comprehensive client and case details

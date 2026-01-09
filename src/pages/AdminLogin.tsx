@@ -11,20 +11,43 @@ const AdminLogin: React.FC = () => {
     const handleLogin = (e: React.FormEvent) => {
         e.preventDefault();
 
+        // Trim whitespace from input
+        const trimmedUsername = username.trim();
+        const trimmedPassword = password.trim();
+
         // Fetch credentials from .env via Vite's import.meta.env
-        const validUser = import.meta.env.VITE_ADMIN_USER || 'admin';
-        const validPass = import.meta.env.VITE_ADMIN_PASS || 'lexconnect2025';
+        // IMPORTANT: Vite requires VITE_ prefix and server restart after .env changes
+        const envUser = import.meta.env.VITE_ADMIN_USER;
+        const envPass = import.meta.env.VITE_ADMIN_PASS;
+        
+        const validUser = envUser ? envUser.trim() : 'admin';
+        const validPass = envPass ? envPass.trim() : 'lexconnect2025';
 
-        console.log('Login attempt with env check:', {
-            envLoadedUser: !!import.meta.env.VITE_ADMIN_USER,
-            envLoadedPass: !!import.meta.env.VITE_ADMIN_PASS
-        });
+        // Debug logging - check browser console
+        console.log('=== Admin Login Debug ===');
+        console.log('Entered Username:', trimmedUsername);
+        console.log('Entered Password Length:', trimmedPassword.length);
+        console.log('Expected Username:', validUser);
+        console.log('Expected Password Length:', validPass.length);
+        console.log('Env Variable Loaded (VITE_ADMIN_USER):', !!envUser);
+        console.log('Env Variable Loaded (VITE_ADMIN_PASS):', !!envPass);
+        console.log('Username Match:', trimmedUsername === validUser);
+        console.log('Password Match:', trimmedPassword === validPass);
+        
+        if (!envUser || !envPass) {
+            console.warn('⚠️ WARNING: Using default credentials!');
+            console.warn('Please create a .env file in the project root with:');
+            console.warn('VITE_ADMIN_USER=your_username');
+            console.warn('VITE_ADMIN_PASS=your_password');
+            console.warn('Then restart the dev server (npm run dev)');
+        }
 
-        if (username === validUser && password === validPass) {
+        // Compare credentials (case-sensitive)
+        if (trimmedUsername === validUser && trimmedPassword === validPass) {
             localStorage.setItem('admin_token', 'lexconnect_session_active');
             navigate('/admin');
         } else {
-            setError('Invalid username or password');
+            setError(`Invalid username or password. ${!envUser || !envPass ? 'Using default credentials. Check console for details.' : ''}`);
         }
     };
 

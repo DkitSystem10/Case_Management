@@ -23,3 +23,4 @@ ADD COLUMN IF NOT EXISTS documents_status TEXT CHECK (documents_status IN ('Uplo
 ADD COLUMN IF NOT EXISTS important_notes TEXT,
 ADD COLUMN IF NOT EXISTS case_priority TEXT CHECK (case_priority IN ('High', 'Medium', 'Low'));
 
+

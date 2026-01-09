@@ -82,6 +82,28 @@ export interface PaymentRecord {
     paymentDate: string;
 }
 
+export interface ClientAppointmentRecord {
+    id: string;
+    fullName: string;
+    phoneNumber: string;
+    emailId: string;
+    address: string;
+    state: string;
+    district: string;
+    alreadyCome: 'Yes' | 'No';
+    appointmentDate: string;
+    timeSlot: string;
+    consultationType: 'In-Person' | 'Online (Video)' | 'Phone';
+    caseCategory: string;
+    documentUrl?: string;
+    description: string;
+    status: 'Pending' | 'Approved' | 'Rejected';
+    rejectionReason?: string;
+    lawyerId?: string;
+    caseId?: string;
+    createdAt: string;
+}
+
 export const getLawyers = async (): Promise<Lawyer[]> => {
     const { data, error } = await supabase
         .from('lawyers')
@@ -182,6 +204,106 @@ export const updateAppointmentStatus = async (id: string, status: AppointmentRec
 
     if (error) {
         console.error('Error updating status:', error);
+        throw error;
+    }
+};
+
+// Client Appointments Functions
+export const saveClientAppointment = async (appointment: Omit<ClientAppointmentRecord, 'id' | 'status' | 'createdAt'>) => {
+    const { data, error } = await supabase
+        .from('client_appointments')
+        .insert([{
+            full_name: appointment.fullName,
+            phone_number: appointment.phoneNumber,
+            email_id: appointment.emailId,
+            address: appointment.address,
+            state: appointment.state,
+            district: appointment.district,
+            already_come: appointment.alreadyCome,
+            appointment_date: appointment.appointmentDate,
+            time_slot: appointment.timeSlot,
+            consultation_type: appointment.consultationType,
+            case_category: appointment.caseCategory,
+            document_url: appointment.documentUrl || null,
+            description: appointment.description,
+            status: 'Pending'
+        }])
+        .select();
+
+    if (error) {
+        console.error('Error saving client appointment:', error);
+        throw error;
+    }
+
+    return {
+        id: data[0].id,
+        fullName: data[0].full_name,
+        phoneNumber: data[0].phone_number,
+        emailId: data[0].email_id,
+        address: data[0].address,
+        state: data[0].state,
+        district: data[0].district,
+        alreadyCome: data[0].already_come,
+        appointmentDate: data[0].appointment_date,
+        timeSlot: data[0].time_slot,
+        consultationType: data[0].consultation_type,
+        caseCategory: data[0].case_category,
+        documentUrl: data[0].document_url,
+        description: data[0].description,
+        status: data[0].status,
+        rejectionReason: data[0].rejection_reason,
+        lawyerId: data[0].lawyer_id,
+        caseId: data[0].case_id,
+        createdAt: data[0].created_at
+    };
+};
+
+export const getClientAppointments = async (): Promise<ClientAppointmentRecord[]> => {
+    const { data, error } = await supabase
+        .from('client_appointments')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching client appointments:', error);
+        return [];
+    }
+
+    return (data || []).map(row => ({
+        id: row.id,
+        fullName: row.full_name,
+        phoneNumber: row.phone_number,
+        emailId: row.email_id,
+        address: row.address,
+        state: row.state,
+        district: row.district,
+        alreadyCome: row.already_come,
+        appointmentDate: row.appointment_date,
+        timeSlot: row.time_slot,
+        consultationType: row.consultation_type,
+        caseCategory: row.case_category,
+        documentUrl: row.document_url,
+        description: row.description,
+        status: row.status,
+        rejectionReason: row.rejection_reason,
+        lawyerId: row.lawyer_id,
+        caseId: row.case_id,
+        createdAt: row.created_at
+    }));
+};
+
+export const updateClientAppointmentStatus = async (id: string, status: ClientAppointmentRecord['status'], rejectionReason?: string) => {
+    const { error } = await supabase
+        .from('client_appointments')
+        .update({
+            status,
+            rejection_reason: rejectionReason,
+            updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
+
+    if (error) {
+        console.error('Error updating client appointment status:', error);
         throw error;
     }
 };
