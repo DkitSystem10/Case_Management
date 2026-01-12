@@ -83,6 +83,15 @@ const AdminDashboard: React.FC = () => {
     const [incomeDate, setIncomeDate] = useState('');
     const [incomeFilterMode, setIncomeFilterMode] = useState<'All' | 'Today' | 'Weekly' | 'Monthly' | 'Custom'>('All');
     const [selectedDistrict, setSelectedDistrict] = useState<{ district: string; state: string; appointments: AppointmentRecord[] } | null>(null);
+    const [filteredByDistrict, setFilteredByDistrict] = useState<string | null>(null); // District name for filtering case list
+    const [districtCasesModal, setDistrictCasesModal] = useState<{ district: string; cases: (AppointmentRecord | ClientAppointmentRecord)[] } | null>(null); // Modal to show all cases from a district
+    const [filteredByLawyer, setFilteredByLawyer] = useState<string | null>(null); // Lawyer ID for filtering cases
+    const [selectedPendingPayment, setSelectedPendingPayment] = useState<{ item: AppointmentRecord | ClientAppointmentRecord; type: 'appointment' | 'clientAppointment' } | null>(null); // Selected pending payment for collection
+    const [paymentCollectionMode, setPaymentCollectionMode] = useState<string>('Cash'); // Payment mode for collection
+    const [paymentCollectionAmount, setPaymentCollectionAmount] = useState<string>(''); // Amount being collected
+    const [paymentCollectionTxnId, setPaymentCollectionTxnId] = useState<string>(''); // Transaction ID for QR/UPI
+    const [showPaymentReportPreview, setShowPaymentReportPreview] = useState(false); // Show payment report preview modal
+    const [activePaymentTab, setActivePaymentTab] = useState<'pending' | 'details'>('pending'); // Active payment tab
     
     // Admin Profile State
     const [adminProfile, setAdminProfile] = useState<{
@@ -529,22 +538,160 @@ const AdminDashboard: React.FC = () => {
         }
     };
 
-    const downloadCSV = (type: 'Today' | 'Weekly' | 'Monthly' | 'Custom') => {
+    const handlePaymentCollection = async () => {
+        if (!selectedPendingPayment) return;
+
+        setIsProcessing(true);
+        try {
+            const amount = parseFloat(paymentCollectionAmount) || 0;
+            if (amount <= 0) {
+                alert('Please enter a valid amount');
+                setIsProcessing(false);
+                return;
+            }
+
+            const txnInfo = (paymentCollectionMode === 'QR' || paymentCollectionMode === 'UPI' || paymentCollectionMode === 'Online') ? paymentCollectionTxnId : '';
+
+            if (selectedPendingPayment.type === 'appointment') {
+                const app = selectedPendingPayment.item as AppointmentRecord;
+                const consultationFee = app.consultationFee || 0;
+                const caseFee = amount - consultationFee;
+                
+                await updateAppointmentPayment(
+                    app.id,
+                    consultationFee,
+                    caseFee >= 0 ? caseFee : 0,
+                    paymentCollectionMode,
+                    txnInfo,
+                    app.fullName,
+                    app.caseId || `BK-${app.id.slice(-6).toUpperCase()}`
+                );
+            } else {
+                // For client appointments, we need to update directly in the database
+                const app = selectedPendingPayment.item as ClientAppointmentRecord;
+                const consultationFee = app.consultationFee || 0;
+                const caseFee = amount - consultationFee;
+                
+                // Update client appointment with payment details using supabase
+                const { supabase } = await import('../utils/supabase');
+                const paymentDate = new Date().toISOString();
+                
+                const { error: updateError } = await supabase
+                    .from('client_appointments')
+                    .update({
+                        consultation_fee: consultationFee,
+                        case_fee: caseFee >= 0 ? caseFee : 0,
+                        payment_mode: paymentCollectionMode,
+                        transaction_id: txnInfo,
+                        payment_date: paymentDate,
+                        updated_at: paymentDate
+                    })
+                    .eq('id', app.id);
+
+                if (updateError) {
+                    throw updateError;
+                }
+
+                // Insert into payments table
+                const caseId = app.caseId || `CL-${app.id.slice(-6).toUpperCase()}`;
+                const { error: payError } = await supabase
+                    .from('payments')
+                    .insert([{
+                        appointment_id: app.id,
+                        case_id: caseId,
+                        client_name: app.fullName,
+                        consultation_fee: consultationFee,
+                        due_fee: caseFee >= 0 ? caseFee : 0,
+                        amount: amount,
+                        payment_mode: paymentCollectionMode,
+                        transaction_id: txnInfo
+                    }]);
+
+                if (payError) {
+                    console.error('Payment Insert Error:', payError);
+                    throw payError;
+                }
+            }
+
+            await loadData();
+            setSelectedPendingPayment(null);
+            setPaymentCollectionAmount('');
+            setPaymentCollectionTxnId('');
+            setPaymentCollectionMode('Cash');
+            setShowSuccessModal(true);
+        } catch (error: any) {
+            console.error('Payment Collection Error:', error);
+            const errorMsg = error.message || error.details || 'Unknown Error';
+            alert(`Payment Collection Error: ${errorMsg}`);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const getFilteredPayments = (type: 'Today' | 'Weekly' | 'Monthly' | 'Custom' | 'All'): PaymentRecord[] => {
         const now = new Date();
         let filtered = [...paymentHistory];
 
+        // Add paid appointments
+        const paidAppointments = appointments.filter(a => 
+            a.status === 'Approved' && 
+            a.paymentDate && 
+            a.paymentDate !== ''
+        ).map(a => ({
+            id: a.id,
+            appointmentId: a.id,
+            caseId: a.caseId || `BK-${a.id.slice(-6).toUpperCase()}`,
+            clientName: a.fullName,
+            consultationFee: a.consultationFee || 0,
+            dueFee: a.caseFee || 0,
+            amount: (a.consultationFee || 0) + (a.caseFee || 0),
+            paymentMode: a.paymentMode || 'Cash',
+            paymentDate: a.paymentDate || '',
+            transactionId: a.transactionId || ''
+        }));
+
+        // Add paid client appointments
+        const paidClientAppointments = clientAppointments.filter(a => 
+            a.status === 'Approved' && 
+            a.paymentDate && 
+            a.paymentDate !== ''
+        ).map(a => ({
+            id: a.id,
+            appointmentId: a.id,
+            caseId: a.caseId || `CL-${a.id.slice(-6).toUpperCase()}`,
+            clientName: a.fullName,
+            consultationFee: a.consultationFee || 0,
+            dueFee: a.caseFee || 0,
+            amount: (a.consultationFee || 0) + (a.caseFee || 0),
+            paymentMode: a.paymentMode || 'Cash',
+            paymentDate: a.paymentDate || '',
+            transactionId: a.transactionId || ''
+        }));
+
+        // Combine all payments and remove duplicates
+        const allPayments = [...filtered, ...paidAppointments, ...paidClientAppointments];
+        const uniquePayments = allPayments.filter((payment, index, self) => 
+            index === self.findIndex(p => p.caseId === payment.caseId && p.paymentDate === payment.paymentDate)
+        );
+
         if (type === 'Today') {
             const todayStr = now.toISOString().split('T')[0];
-            filtered = filtered.filter(p => p.paymentDate?.startsWith(todayStr));
+            return uniquePayments.filter(p => p.paymentDate?.startsWith(todayStr));
         } else if (type === 'Weekly') {
             const lastWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-            filtered = filtered.filter(p => new Date(p.paymentDate) >= lastWeek);
+            return uniquePayments.filter(p => new Date(p.paymentDate) >= lastWeek);
         } else if (type === 'Monthly') {
             const lastMonth = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-            filtered = filtered.filter(p => new Date(p.paymentDate) >= lastMonth);
+            return uniquePayments.filter(p => new Date(p.paymentDate) >= lastMonth);
         } else if (type === 'Custom' && incomeDate) {
-            filtered = filtered.filter(p => p.paymentDate?.startsWith(incomeDate));
+            return uniquePayments.filter(p => p.paymentDate?.startsWith(incomeDate));
         }
+
+        return uniquePayments;
+    };
+
+    const downloadCSV = (type: 'Today' | 'Weekly' | 'Monthly' | 'Custom') => {
+        const filtered = getFilteredPayments(type);
 
         if (filtered.length === 0) {
             alert(`No payment records found for ${type}`);
@@ -572,6 +719,7 @@ const AdminDashboard: React.FC = () => {
         const link = document.createElement('a');
         const url = URL.createObjectURL(blob);
         link.setAttribute('href', url);
+        const now = new Date();
         const fileName = type === 'Custom' ? `Payment_Report_${incomeDate}.csv` : `Payment_Report_${type}_${now.toISOString().split('T')[0]}.csv`;
         link.setAttribute('download', fileName);
         link.style.visibility = 'hidden';
@@ -605,7 +753,22 @@ const AdminDashboard: React.FC = () => {
             app.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
             (app.caseId && app.caseId.toLowerCase().includes(searchQuery.toLowerCase()));
         const matchesDate = appliedDate ? app.appointmentDate === appliedDate : true;
-        return matchesSearch && matchesDate;
+        // Case-insensitive district matching
+        const matchesDistrict = filteredByDistrict ? (
+            (app.city && app.city.toLowerCase().trim() === filteredByDistrict.toLowerCase().trim()) ||
+            (app.district && app.district.toLowerCase().trim() === filteredByDistrict.toLowerCase().trim())
+        ) : true;
+        // Lawyer filtering - check both lawyerId and assignedAdvocate
+        const matchesLawyer = filteredByLawyer ? (() => {
+            const selectedLawyer = lawyers.find(l => l.id === filteredByLawyer);
+            if (!selectedLawyer) return false;
+            // Check if lawyerId matches
+            if (app.lawyerId === filteredByLawyer) return true;
+            // Check if assignedAdvocate name matches
+            if (app.assignedAdvocate && app.assignedAdvocate === selectedLawyer.name) return true;
+            return false;
+        })() : true;
+        return matchesSearch && matchesDate && matchesDistrict && matchesLawyer;
     });
 
     const columns = {
@@ -896,7 +1059,7 @@ const AdminDashboard: React.FC = () => {
                                             className="fixed inset-0 z-50" 
                                             onClick={() => setShowNotificationDropdown(false)}
                                         />
-                                        <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden z-[60] max-h-[500px] flex flex-col">
+                                        <div className="fixed sm:absolute top-[70px] sm:top-full right-2 sm:right-0 sm:mt-2 w-[calc(100vw-1rem)] max-w-[320px] sm:w-80 sm:max-w-none md:w-96 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden z-[60] max-h-[500px] flex flex-col">
                                             <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-indigo-50">
                                                 <div className="flex items-center justify-between">
                                                     <h3 className="text-sm font-black text-slate-900">Notifications</h3>
@@ -1389,13 +1552,68 @@ const AdminDashboard: React.FC = () => {
                                         </button>
                                     </div>
                                     <div className="space-y-3 sm:space-y-4 max-h-[400px] overflow-y-auto scrollbar-hide">
-                                        {lawyers.slice(0, 10).map((lawyer) => {
+                                        {lawyers.map((lawyer) => {
                                             const lawyerCases = appointments.filter(a => a.lawyerId === lawyer.id || a.assignedAdvocate === lawyer.name).length;
                                             const lawyerRevenue = appointments
                                                 .filter(a => a.lawyerId === lawyer.id || a.assignedAdvocate === lawyer.name)
                                                 .reduce((sum, a) => sum + (a.totalFee || a.consultationFee || 0) + (a.caseFee || 0), 0);
+                                            const isSelected = filteredByLawyer === lawyer.id;
+                                            const handleLawyerClick = (e: React.MouseEvent) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                
+                                                // Find all cases for this lawyer
+                                                const casesForLawyer = appointments.filter(a => 
+                                                    a.lawyerId === lawyer.id || 
+                                                    a.assignedAdvocate === lawyer.name
+                                                );
+                                                
+                                                console.log('Lawyer clicked:', lawyer.name, lawyer.id);
+                                                console.log('Total cases for lawyer:', casesForLawyer.length);
+                                                console.log('Cases:', casesForLawyer);
+                                                
+                                                // Set filter
+                                                setFilteredByLawyer(lawyer.id);
+                                                
+                                                // Determine which stage to show based on cases
+                                                if (casesForLawyer.length > 0) {
+                                                    // Check if there are any pending cases
+                                                    const hasPending = casesForLawyer.some(a => a.status === 'Pending');
+                                                    // Check if there are any approved cases
+                                                    const hasApproved = casesForLawyer.some(a => a.status === 'Approved');
+                                                    
+                                                    if (hasPending) {
+                                                        setActiveStage('Inquiry');
+                                                    } else if (hasApproved) {
+                                                        // Check if they have fees (Litigation) or not (Verified)
+                                                        const hasFees = casesForLawyer.some(a => a.status === 'Approved' && a.consultationFee > 0);
+                                                        setActiveStage(hasFees ? 'Litigation' : 'Verified');
+                                                    } else {
+                                                        setActiveStage('Inquiry');
+                                                    }
+                                                } else {
+                                                    // No cases, show Inquiry anyway
+                                                    setActiveStage('Inquiry');
+                                                }
+                                            };
                                             return (
-                                                <div key={lawyer.id} className="flex items-center justify-between p-3 sm:p-4 bg-white rounded-xl border border-slate-100 hover:border-purple-300 hover:shadow-md transition-all cursor-pointer" onClick={() => setActiveStage('Directory')}>
+                                                <div 
+                                                    key={lawyer.id} 
+                                                    className={`flex items-center justify-between p-3 sm:p-4 rounded-xl border-2 transition-all cursor-pointer select-none active:scale-95 ${
+                                                        isSelected 
+                                                            ? 'border-purple-500 bg-purple-50 shadow-lg ring-2 ring-purple-200' 
+                                                            : 'border-slate-100 bg-white hover:border-purple-300 hover:shadow-md'
+                                                    }`} 
+                                                    onClick={handleLawyerClick}
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter' || e.key === ' ') {
+                                                            e.preventDefault();
+                                                            handleLawyerClick(e as any);
+                                                        }
+                                                    }}
+                                                >
                                                     <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
                                                         <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-white font-black text-sm sm:text-base flex-shrink-0">
                                                             {lawyer.name.charAt(0).toUpperCase()}
@@ -1463,8 +1681,54 @@ const AdminDashboard: React.FC = () => {
                                             
                                             return sortedDistricts.map(([district, count], index) => {
                                                 const percentage = totalCases > 0 ? Math.round((count / totalCases) * 100) : 0;
+                                                const handleDistrictClick = (e: React.MouseEvent) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    
+                                                    // Collect all cases from this district
+                                                    const districtCases: (AppointmentRecord | ClientAppointmentRecord)[] = [];
+                                                    
+                                                    // Add appointments from this district
+                                                    appointments.forEach(app => {
+                                                        if ((app.city && app.city.toLowerCase().trim() === district.toLowerCase().trim()) ||
+                                                            (app.district && app.district.toLowerCase().trim() === district.toLowerCase().trim())) {
+                                                            districtCases.push(app);
+                                                        }
+                                                    });
+                                                    
+                                                    // Add client appointments from this district
+                                                    clientAppointments.forEach(app => {
+                                                        if ((app.district && app.district.toLowerCase().trim() === district.toLowerCase().trim()) ||
+                                                            (app.city && app.city.toLowerCase().trim() === district.toLowerCase().trim())) {
+                                                            districtCases.push(app);
+                                                        }
+                                                    });
+                                                    
+                                                    // Show modal with all cases
+                                                    setDistrictCasesModal({
+                                                        district: district,
+                                                        cases: districtCases
+                                                    });
+                                                };
+                                                const isSelected = filteredByDistrict === district;
                                                 return (
-                                                    <div key={district} className="flex items-center justify-between p-3 sm:p-4 bg-white rounded-xl border border-slate-100 hover:border-emerald-300 hover:shadow-md transition-all cursor-pointer" onClick={() => setActiveStage('Districts')}>
+                                                    <div 
+                                                        key={district} 
+                                                        className={`flex items-center justify-between p-3 sm:p-4 rounded-xl border-2 transition-all cursor-pointer select-none active:scale-95 ${
+                                                            isSelected 
+                                                                ? 'border-emerald-500 bg-emerald-50 shadow-lg ring-2 ring-emerald-200' 
+                                                                : 'border-slate-100 bg-white hover:border-emerald-300 hover:shadow-md hover:bg-emerald-50/50'
+                                                        }`} 
+                                                        onClick={handleDistrictClick}
+                                                        role="button"
+                                                        tabIndex={0}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                                e.preventDefault();
+                                                                handleDistrictClick(e as any);
+                                                            }
+                                                        }}
+                                                    >
                                                         <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
                                                             <div className="text-2xl sm:text-3xl flex-shrink-0">{districtIcons[index % districtIcons.length]}</div>
                                                             <div className="min-w-0 flex-1">
@@ -1601,6 +1865,53 @@ const AdminDashboard: React.FC = () => {
 
                     {activeStage === 'ClientAppointments' ? (
                         <div className="space-y-4 sm:space-y-6">
+                            {/* Filter Indicators for ClientAppointments */}
+                            {(filteredByDistrict || filteredByLawyer) && (
+                                <div className="px-4 sm:px-6 py-3 border border-slate-200 rounded-xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-4 bg-gradient-to-r from-slate-50 to-blue-50 mb-4">
+                                    <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+                                        {filteredByDistrict && (
+                                            <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 rounded-lg border border-emerald-200">
+                                                <MapPin className="h-4 w-4 text-emerald-600" />
+                                                <span className="text-sm font-bold text-emerald-900">
+                                                    District: <span className="font-black">{filteredByDistrict}</span>
+                                                </span>
+                                                <button
+                                                    onClick={() => setFilteredByDistrict(null)}
+                                                    className="ml-1 text-emerald-600 hover:text-emerald-700"
+                                                >
+                                                    <XCircle className="h-3.5 w-3.5" />
+                                                </button>
+                                            </div>
+                                        )}
+                                        {filteredByLawyer && (
+                                            <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-50 rounded-lg border border-purple-200">
+                                                <User className="h-4 w-4 text-purple-600" />
+                                                <span className="text-sm font-bold text-purple-900">
+                                                    Lawyer: <span className="font-black">{lawyers.find(l => l.id === filteredByLawyer)?.name || 'Unknown'}</span>
+                                                </span>
+                                                <button
+                                                    onClick={() => setFilteredByLawyer(null)}
+                                                    className="ml-1 text-purple-600 hover:text-purple-700"
+                                                >
+                                                    <XCircle className="h-3.5 w-3.5" />
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                    {(filteredByDistrict || filteredByLawyer) && (
+                                        <button
+                                            onClick={() => {
+                                                setFilteredByDistrict(null);
+                                                setFilteredByLawyer(null);
+                                            }}
+                                            className="text-xs font-bold text-slate-600 hover:text-slate-700 hover:underline flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition-colors whitespace-nowrap"
+                                        >
+                                            <XCircle className="h-3.5 w-3.5" />
+                                            Clear All Filters
+                                        </button>
+                                    )}
+                                </div>
+                            )}
                             <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                                 <div className="overflow-x-auto -mx-3 sm:mx-0">
                                     <div className="inline-block min-w-full align-middle px-3 sm:px-0">
@@ -1618,7 +1929,20 @@ const AdminDashboard: React.FC = () => {
                                             </thead>
                                             <tbody className="bg-white divide-y divide-slate-50">
                                                 {clientAppointments
-                                                    .filter(app => activeCategory === 'All' ? true : (activeCategory === 'Others' ? !['Civil', 'Criminal', 'Family', 'Property'].includes(app.caseCategory) : app.caseCategory === activeCategory))
+                                                    .filter(app => {
+                                                        const matchesCategory = activeCategory === 'All' ? true : (activeCategory === 'Others' ? !['Civil', 'Criminal', 'Family', 'Property'].includes(app.caseCategory) : app.caseCategory === activeCategory);
+                                                        // Case-insensitive district matching
+                                                        const matchesDistrict = filteredByDistrict ? (
+                                                            (app.district && app.district.toLowerCase().trim() === filteredByDistrict.toLowerCase().trim()) ||
+                                                            (app.city && app.city.toLowerCase().trim() === filteredByDistrict.toLowerCase().trim())
+                                                        ) : true;
+                                                        // Lawyer filtering for client appointments
+                                                        const matchesLawyer = filteredByLawyer ? (
+                                                            (app as any).lawyerId === filteredByLawyer || 
+                                                            ((app as any).assignedAdvocate && lawyers.find(l => l.id === filteredByLawyer && l.name === (app as any).assignedAdvocate))
+                                                        ) : true;
+                                                        return matchesCategory && matchesDistrict && matchesLawyer;
+                                                    })
                                                     .map((app, idx) => (
                                                         <tr
                                                             key={app.id}
@@ -1679,50 +2003,328 @@ const AdminDashboard: React.FC = () => {
                                     <h3 className="text-xl font-black text-slate-900">Payment Overview</h3>
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Financial summary and transaction logs</p>
                                 </div>
-                                <div className="flex flex-wrap gap-2 text-xs">
+                                {activePaymentTab === 'details' && (
+                                    <div className="flex flex-wrap gap-2 text-xs">
+                                        <button
+                                            onClick={() => { setIncomeFilterMode('Today'); setIncomeDate(''); }}
+                                            className={`px-5 py-2.5 rounded-lg font-black uppercase tracking-widest transition-all border ${incomeFilterMode === 'Today' ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-600 border-slate-200'}`}
+                                        >
+                                            Today
+                                        </button>
+                                        <button
+                                            onClick={() => { setIncomeFilterMode('Weekly'); setIncomeDate(''); }}
+                                            className={`px-5 py-2.5 rounded-lg font-black uppercase tracking-widest transition-all border ${incomeFilterMode === 'Weekly' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 text-slate-600 border-slate-200'}`}
+                                        >
+                                            Weekly
+                                        </button>
+                                        <button
+                                            onClick={() => { setIncomeFilterMode('Monthly'); setIncomeDate(''); }}
+                                            className={`px-5 py-2.5 rounded-lg font-black uppercase tracking-widest transition-all border ${incomeFilterMode === 'Monthly' ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 text-slate-600 border-slate-200'}`}
+                                        >
+                                            Full Report
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                const filtered = getFilteredPayments(incomeFilterMode === 'All' ? 'Monthly' : incomeFilterMode as any);
+                                                if (filtered.length === 0) {
+                                                    alert(`No payment records found for ${incomeFilterMode === 'All' ? 'Monthly' : incomeFilterMode}`);
+                                                    return;
+                                                }
+                                                setShowPaymentReportPreview(true);
+                                            }}
+                                            className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 flex items-center gap-2"
+                                        >
+                                            <FileText className="h-4 w-4" />
+                                            View Report
+                                        </button>
+                                        <button
+                                            onClick={() => downloadCSV(incomeFilterMode === 'All' ? 'Monthly' : incomeFilterMode as any)}
+                                            className="px-5 py-2.5 bg-emerald-600 text-white rounded-lg font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 flex items-center gap-2"
+                                        >
+                                            <FileText className="h-4 w-4" />
+                                            Export CSV
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Payment Tabs */}
+                            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                                <div className="flex border-b border-slate-200">
                                     <button
-                                        onClick={() => { setIncomeFilterMode('Today'); setIncomeDate(''); }}
-                                        className={`px-5 py-2.5 rounded-lg font-black uppercase tracking-widest transition-all border ${incomeFilterMode === 'Today' ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-600 border-slate-200'}`}
+                                        onClick={() => setActivePaymentTab('pending')}
+                                        className={`flex-1 px-6 py-4 text-center font-black uppercase tracking-wider transition-all relative ${
+                                            activePaymentTab === 'pending'
+                                                ? 'text-amber-600 bg-amber-50 border-b-2 border-amber-500'
+                                                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                                        }`}
                                     >
-                                        Today
+                                        <div className="flex items-center justify-center gap-2">
+                                            <Clock className="h-5 w-5" />
+                                            <span>Pending Payment</span>
+                                            {(() => {
+                                                const pendingCount = [
+                                                    ...appointments.filter(a => 
+                                                        a.status === 'Approved' && 
+                                                        (!a.paymentDate || a.paymentDate === '') &&
+                                                        ((a.consultationFee && a.consultationFee > 0) || (a.caseFee && a.caseFee > 0))
+                                                    ),
+                                                    ...clientAppointments.filter(a => 
+                                                        a.status === 'Approved' && 
+                                                        (!a.paymentDate || a.paymentDate === '') &&
+                                                        ((a.consultationFee && a.consultationFee > 0) || (a.caseFee && a.caseFee > 0))
+                                                    )
+                                                ].length;
+                                                return pendingCount > 0 ? (
+                                                    <span className={`px-2 py-0.5 rounded-full text-xs font-black ${
+                                                        activePaymentTab === 'pending' ? 'bg-amber-600 text-white' : 'bg-amber-100 text-amber-600'
+                                                    }`}>
+                                                        {pendingCount}
+                                                    </span>
+                                                ) : null;
+                                            })()}
+                                        </div>
                                     </button>
                                     <button
-                                        onClick={() => { setIncomeFilterMode('Weekly'); setIncomeDate(''); }}
-                                        className={`px-5 py-2.5 rounded-lg font-black uppercase tracking-widest transition-all border ${incomeFilterMode === 'Weekly' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 text-slate-600 border-slate-200'}`}
+                                        onClick={() => setActivePaymentTab('details')}
+                                        className={`flex-1 px-6 py-4 text-center font-black uppercase tracking-wider transition-all relative ${
+                                            activePaymentTab === 'details'
+                                                ? 'text-emerald-600 bg-emerald-50 border-b-2 border-emerald-500'
+                                                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                                        }`}
                                     >
-                                        Weekly
-                                    </button>
-                                    <button
-                                        onClick={() => { setIncomeFilterMode('Monthly'); setIncomeDate(''); }}
-                                        className={`px-5 py-2.5 rounded-lg font-black uppercase tracking-widest transition-all border ${incomeFilterMode === 'Monthly' ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 text-slate-600 border-slate-200'}`}
-                                    >
-                                        Full Report
-                                    </button>
-                                    <button
-                                        onClick={() => downloadCSV(incomeFilterMode === 'All' ? 'Monthly' : incomeFilterMode as any)}
-                                        className="px-5 py-2.5 bg-emerald-600 text-white rounded-lg font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 flex items-center gap-2"
-                                    >
-                                        <FileText className="h-4 w-4" />
-                                        Export CSV
+                                        <div className="flex items-center justify-center gap-2">
+                                            <CheckCircle2 className="h-5 w-5" />
+                                            <span>Payment Details</span>
+                                        </div>
                                     </button>
                                 </div>
                             </div>
 
-                            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden text-sm">
+                            {/* Pending Payment Section */}
+                            {activePaymentTab === 'pending' && (
+                            <div className="bg-white rounded-2xl border-2 border-amber-200 shadow-sm overflow-hidden">
+                                <div className="bg-gradient-to-r from-amber-50 to-orange-50 px-6 py-4 border-b border-amber-200">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 bg-amber-500 rounded-xl flex items-center justify-center">
+                                            <Clock className="h-5 w-5 text-white" />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-lg font-black text-slate-900 uppercase tracking-tight">Pending Payment</h4>
+                                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">
+                                                Approved appointments awaiting payment
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="overflow-x-auto -mx-2 sm:mx-0" style={{ maxWidth: '100vw', scrollbarWidth: 'thin', WebkitOverflowScrolling: 'touch' }}>
+                                    <div className="min-w-[600px] sm:min-w-0">
+                                        <table className="w-full text-left border-collapse">
+                                            <thead>
+                                                <tr className="bg-slate-50/50 border-b border-slate-100">
+                                                    <th className="px-3 sm:px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">#</th>
+                                                    <th className="px-3 sm:px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap min-w-[150px]">Client Name</th>
+                                                    <th className="px-3 sm:px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap min-w-[120px]">Contact</th>
+                                                    <th className="px-3 sm:px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap min-w-[100px]">Category</th>
+                                                    <th className="px-3 sm:px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right whitespace-nowrap min-w-[100px]">Amount Due</th>
+                                                    <th className="px-3 sm:px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center whitespace-nowrap min-w-[120px]">Action</th>
+                                                </tr>
+                                            </thead>
+                                        <tbody className="divide-y divide-slate-50">
+                                            {(() => {
+                                                // Get approved appointments without payment
+                                                const pendingAppointments = appointments.filter(a => 
+                                                    a.status === 'Approved' && 
+                                                    (!a.paymentDate || a.paymentDate === '') &&
+                                                    ((a.consultationFee && a.consultationFee > 0) || (a.caseFee && a.caseFee > 0))
+                                                );
+                                                
+                                                // Get approved client appointments without payment
+                                                const pendingClientAppointments = clientAppointments.filter(a => 
+                                                    a.status === 'Approved' && 
+                                                    (!a.paymentDate || a.paymentDate === '') &&
+                                                    ((a.consultationFee && a.consultationFee > 0) || (a.caseFee && a.caseFee > 0))
+                                                );
+                                                
+                                                const allPending = [
+                                                    ...pendingAppointments.map(a => ({ ...a, type: 'appointment' as const })),
+                                                    ...pendingClientAppointments.map(a => ({ ...a, type: 'clientAppointment' as const }))
+                                                ];
+                                                
+                                                if (allPending.length === 0) {
+                                                    return (
+                                                        <tr>
+                                                            <td colSpan={6} className="px-4 py-12 text-center">
+                                                                <div className="flex flex-col items-center">
+                                                                    <CheckCircle2 className="h-12 w-12 text-emerald-300 mb-3" />
+                                                                    <p className="text-sm font-bold text-slate-500">No pending payments</p>
+                                                                    <p className="text-xs text-slate-400 mt-1">All approved appointments have been paid</p>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                }
+                                                
+                                                return allPending.map((item, idx) => {
+                                                    const totalDue = (item.consultationFee || 0) + (item.caseFee || 0);
+                                                    return (
+                                                        <tr 
+                                                            key={item.id} 
+                                                            className="hover:bg-amber-50/50 transition-colors cursor-pointer"
+                                                            onClick={() => {
+                                                                if (item.type === 'clientAppointment') {
+                                                                    setSelectedClientAppointment(item as ClientAppointmentRecord);
+                                                                } else {
+                                                                    setSelectedCase(item as AppointmentRecord);
+                                                                }
+                                                            }}
+                                                        >
+                                                            <td className="px-3 sm:px-4 py-3 text-sm font-medium text-slate-400 whitespace-nowrap">{idx + 1}</td>
+                                                            <td className="px-3 sm:px-4 py-3">
+                                                                <div 
+                                                                    className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        if (item.type === 'clientAppointment') {
+                                                                            setSelectedClientAppointment(item as ClientAppointmentRecord);
+                                                                        } else {
+                                                                            setSelectedCase(item as AppointmentRecord);
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-xs font-bold text-amber-600 flex-shrink-0">
+                                                                        {item.fullName.charAt(0)}
+                                                                    </div>
+                                                                    <p className="text-sm font-bold text-slate-700 truncate min-w-0">{item.fullName}</p>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-3 sm:px-4 py-3 whitespace-nowrap">
+                                                                <p className="text-xs font-medium text-slate-600 truncate">{item.phoneNumber}</p>
+                                                                {item.emailId && (
+                                                                    <p className="text-[10px] text-slate-400 truncate">{item.emailId}</p>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-3 sm:px-4 py-3 whitespace-nowrap">
+                                                                <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md">
+                                                                    {item.caseCategory}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-3 sm:px-4 py-3 text-right whitespace-nowrap">
+                                                                <span className="text-sm font-black text-amber-600 flex items-center justify-end gap-1">
+                                                                    <IndianRupee className="h-3.5 w-3.5 flex-shrink-0" />
+                                                                    {totalDue}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-3 sm:px-4 py-3 text-center whitespace-nowrap">
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setSelectedPendingPayment({
+                                                                            item: item,
+                                                                            type: item.type
+                                                                        });
+                                                                        // Pre-fill amount
+                                                                        const totalDue = (item.consultationFee || 0) + (item.caseFee || 0);
+                                                                        setPaymentCollectionAmount(totalDue > 0 ? totalDue.toString() : '');
+                                                                        setPaymentCollectionMode('Cash');
+                                                                        setPaymentCollectionTxnId('');
+                                                                    }}
+                                                                    className="px-3 sm:px-4 py-1.5 sm:py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] sm:text-xs font-black uppercase tracking-wider rounded-lg transition-all active:scale-95 shadow-md whitespace-nowrap"
+                                                                >
+                                                                    Collect Payment
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                });
+                                            })()}
+                                        </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                            )}
+
+                            {/* Payment Details Section */}
+                            {activePaymentTab === 'details' && (
+                            <div className="bg-white rounded-2xl border-2 border-emerald-200 shadow-sm overflow-hidden">
+                                <div className="bg-gradient-to-r from-emerald-50 to-teal-50 px-6 py-4 border-b border-emerald-200">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center">
+                                            <CheckCircle2 className="h-5 w-5 text-white" />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-lg font-black text-slate-900 uppercase tracking-tight">Payment Details</h4>
+                                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">
+                                                All completed payments with details
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-left border-collapse">
                                         <thead>
-                                            <tr className="bg-slate-50/50">
-                                                <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Case ID</th>
-                                                <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Client</th>
-                                                <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Total</th>
-                                                <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Mode</th>
-                                                <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Date</th>
+                                            <tr className="bg-slate-50/50 border-b border-slate-100">
+                                                <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Case ID</th>
+                                                <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Client Name</th>
+                                                <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Amount Paid</th>
+                                                <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Payment Mode</th>
+                                                <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Date & Time</th>
+                                                <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Hearing Details</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-50 text-sm">
-                                            {paymentHistory
-                                                .filter(pay => {
+                                            {(() => {
+                                                // Get all paid appointments
+                                                const paidAppointments = appointments.filter(a => 
+                                                    a.status === 'Approved' && 
+                                                    a.paymentDate && 
+                                                    a.paymentDate !== ''
+                                                );
+                                                
+                                                // Get all paid client appointments
+                                                const paidClientAppointments = clientAppointments.filter(a => 
+                                                    a.status === 'Approved' && 
+                                                    a.paymentDate && 
+                                                    a.paymentDate !== ''
+                                                );
+                                                
+                                                // Combine payment history with appointments
+                                                const allPayments = [
+                                                    ...paymentHistory.map(p => ({ ...p, source: 'history' as const })),
+                                                    ...paidAppointments
+                                                        .filter(a => !paymentHistory.some(p => p.caseId === (a.caseId || `BK-${a.id.slice(-6).toUpperCase()}`)))
+                                                        .map(a => ({
+                                                            id: a.id,
+                                                            caseId: a.caseId || `BK-${a.id.slice(-6).toUpperCase()}`,
+                                                            clientName: a.fullName,
+                                                            amount: (a.consultationFee || 0) + (a.caseFee || 0),
+                                                            consultationFee: a.consultationFee || 0,
+                                                            dueFee: a.caseFee || 0,
+                                                            paymentMode: a.paymentMode || 'Cash',
+                                                            paymentDate: a.paymentDate || '',
+                                                            transactionId: a.transactionId || '',
+                                                            hearingDate: a.courtHearingDate || a.nextHearingDate || '',
+                                                            hearingTime: a.hearingTime || '',
+                                                            source: 'appointment' as const
+                                                        })),
+                                                    ...paidClientAppointments
+                                                        .filter(a => !paymentHistory.some(p => p.caseId === (a.caseId || `CL-${a.id.slice(-6).toUpperCase()}`)))
+                                                        .map(a => ({
+                                                            id: a.id,
+                                                            caseId: a.caseId || `CL-${a.id.slice(-6).toUpperCase()}`,
+                                                            clientName: a.fullName,
+                                                            amount: (a.consultationFee || 0) + (a.caseFee || 0),
+                                                            consultationFee: a.consultationFee || 0,
+                                                            dueFee: a.caseFee || 0,
+                                                            paymentMode: a.paymentMode || 'Cash',
+                                                            paymentDate: a.paymentDate || '',
+                                                            transactionId: a.transactionId || '',
+                                                            hearingDate: a.courtHearingDate || a.nextHearingDate || '',
+                                                            hearingTime: a.hearingTime || '',
+                                                            source: 'clientAppointment' as const
+                                                        }))
+                                                ].filter(pay => {
                                                     const now = new Date();
                                                     if (incomeFilterMode === 'Today') return pay.paymentDate?.startsWith(now.toISOString().split('T')[0]);
                                                     if (incomeFilterMode === 'Weekly') {
@@ -1734,37 +2336,89 @@ const AdminDashboard: React.FC = () => {
                                                         return new Date(pay.paymentDate) >= lastMonth;
                                                     }
                                                     return true;
-                                                })
-                                                .map((pay) => (
-                                                    <tr key={pay.id} className="hover:bg-blue-50/30 transition-colors group">
-                                                        <td className="px-4 py-2.5">
-                                                            <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-md">{pay.caseId}</span>
-                                                        </td>
-                                                        <td className="px-4 py-2.5">
-                                                            <p className="text-[11px] font-bold text-slate-700">{pay.clientName}</p>
-                                                        </td>
-                                                        <td className="px-4 py-2.5 text-right">
-                                                            <span className="text-[10px] font-black text-emerald-600 flex items-center justify-end gap-1">
-                                                                <IndianRupee className="h-2.5 w-2.5" />
-                                                                {pay.amount}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-4 py-2.5 text-center">
-                                                            <span className={`text-[8.5px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-wider ${pay.paymentMode === 'Cash' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'}`}>
-                                                                {pay.paymentMode}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-4 py-2.5 text-right">
-                                                            <span className="text-[10px] font-bold text-slate-500">
-                                                                {new Date(pay.paymentDate).toLocaleDateString()}
-                                                            </span>
-                                                        </td>
-                                                    </tr>
-                                                ))}
+                                                }).sort((a, b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime());
+                                                
+                                                if (allPayments.length === 0) {
+                                                    return (
+                                                        <tr>
+                                                            <td colSpan={6} className="px-4 py-12 text-center">
+                                                                <div className="flex flex-col items-center">
+                                                                    <FileText className="h-12 w-12 text-slate-300 mb-3" />
+                                                                    <p className="text-sm font-bold text-slate-500">No payment records found</p>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                }
+                                                
+                                                return allPayments.map((pay) => {
+                                                    const paymentDateTime = pay.paymentDate ? new Date(pay.paymentDate) : null;
+                                                    return (
+                                                        <tr key={pay.id} className="hover:bg-emerald-50/30 transition-colors group">
+                                                            <td className="px-4 py-3">
+                                                                <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-md">{pay.caseId}</span>
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <p className="text-[11px] font-bold text-slate-700">{pay.clientName}</p>
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <div className="flex flex-col">
+                                                                    <span className="text-[10px] font-black text-emerald-600 flex items-center gap-1">
+                                                                        <IndianRupee className="h-2.5 w-2.5" />
+                                                                        {pay.amount}
+                                                                    </span>
+                                                                    {(pay.consultationFee > 0 || pay.dueFee > 0) && (
+                                                                        <span className="text-[8px] text-slate-400 mt-0.5">
+                                                                            Consult: ₹{pay.consultationFee || 0} | Case: ₹{pay.dueFee || 0}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-center">
+                                                                <span className={`text-[8.5px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-wider ${pay.paymentMode === 'Cash' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'}`}>
+                                                                    {pay.paymentMode}
+                                                                </span>
+                                                                {pay.transactionId && (
+                                                                    <p className="text-[8px] text-slate-400 mt-1">Txn: {pay.transactionId.slice(-6)}</p>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                {paymentDateTime && (
+                                                                    <div className="flex flex-col">
+                                                                        <span className="text-[10px] font-bold text-slate-700">
+                                                                            {paymentDateTime.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                                        </span>
+                                                                        <span className="text-[9px] text-slate-500">
+                                                                            {paymentDateTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                {pay.hearingDate ? (
+                                                                    <div className="flex flex-col">
+                                                                        <span className="text-[10px] font-bold text-slate-700">
+                                                                            {new Date(pay.hearingDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                                        </span>
+                                                                        {pay.hearingTime && (
+                                                                            <span className="text-[9px] text-slate-500">
+                                                                                {pay.hearingTime}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                ) : (
+                                                                    <span className="text-[9px] text-slate-400 italic">Not scheduled</span>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                });
+                                            })()}
                                         </tbody>
                                     </table>
                                 </div>
                             </div>
+                            )}
                         </div>
                     ) : activeStage === 'Verified' ? (
                         <div className="space-y-6">
@@ -2721,6 +3375,53 @@ const AdminDashboard: React.FC = () => {
                         </div>
                     ) : (
                         <div className="bg-white rounded-xl sm:rounded-[2rem] border border-slate-100 shadow-sm shadow-slate-200/50 overflow-hidden">
+                            {/* Filter Indicators */}
+                            {(filteredByDistrict || filteredByLawyer) && (
+                                <div className="px-4 sm:px-6 py-3 border-b border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-4 bg-gradient-to-r from-slate-50 to-blue-50">
+                                    <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+                                        {filteredByDistrict && (
+                                            <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 rounded-lg border border-emerald-200">
+                                                <MapPin className="h-4 w-4 text-emerald-600" />
+                                                <span className="text-sm font-bold text-emerald-900">
+                                                    District: <span className="font-black">{filteredByDistrict}</span>
+                                                </span>
+                                                <button
+                                                    onClick={() => setFilteredByDistrict(null)}
+                                                    className="ml-1 text-emerald-600 hover:text-emerald-700"
+                                                >
+                                                    <XCircle className="h-3.5 w-3.5" />
+                                                </button>
+                                            </div>
+                                        )}
+                                        {filteredByLawyer && (
+                                            <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-50 rounded-lg border border-purple-200">
+                                                <User className="h-4 w-4 text-purple-600" />
+                                                <span className="text-sm font-bold text-purple-900">
+                                                    Lawyer: <span className="font-black">{lawyers.find(l => l.id === filteredByLawyer)?.name || 'Unknown'}</span>
+                                                </span>
+                                                <button
+                                                    onClick={() => setFilteredByLawyer(null)}
+                                                    className="ml-1 text-purple-600 hover:text-purple-700"
+                                                >
+                                                    <XCircle className="h-3.5 w-3.5" />
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                    {(filteredByDistrict || filteredByLawyer) && (
+                                        <button
+                                            onClick={() => {
+                                                setFilteredByDistrict(null);
+                                                setFilteredByLawyer(null);
+                                            }}
+                                            className="text-xs font-bold text-slate-600 hover:text-slate-700 hover:underline flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition-colors whitespace-nowrap"
+                                        >
+                                            <XCircle className="h-3.5 w-3.5" />
+                                            Clear All Filters
+                                        </button>
+                                    )}
+                                </div>
+                            )}
                             <div className="overflow-x-auto min-h-[400px] -mx-3 sm:mx-0">
                                 <div className="inline-block min-w-full align-middle px-3 sm:px-0">
                                     <table className="min-w-full text-left divide-y divide-slate-200">
@@ -2735,12 +3436,26 @@ const AdminDashboard: React.FC = () => {
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white divide-y divide-slate-50">
-                                            {(activeStage === 'Inquiry' ? columns.pending :
-                                                activeStage === 'Verified' ? columns.verified :
+                                            {(() => {
+                                                // When lawyer is filtered, show all their cases regardless of stage
+                                                let casesToShow = activeStage === 'Inquiry' ? columns.pending :
+                                                    activeStage === 'Verified' ? columns.verified :
                                                     activeStage === 'Litigation' ? columns.litigation :
-                                                        columns.rejected)
-                                                .filter(a => activeCategory === 'All' ? true : (activeCategory === 'Others' ? !['Civil', 'Criminal', 'Family', 'Property'].includes(a.caseCategory) : a.caseCategory === activeCategory))
-                                                .map((app, idx) => (
+                                                    columns.rejected;
+                                                
+                                                // If lawyer filter is active, show all cases for that lawyer from all stages
+                                                if (filteredByLawyer) {
+                                                    const selectedLawyer = lawyers.find(l => l.id === filteredByLawyer);
+                                                    casesToShow = filteredData.filter(a => {
+                                                        if (a.lawyerId === filteredByLawyer) return true;
+                                                        if (selectedLawyer && a.assignedAdvocate === selectedLawyer.name) return true;
+                                                        return false;
+                                                    });
+                                                }
+                                                
+                                                return casesToShow
+                                                    .filter(a => activeCategory === 'All' ? true : (activeCategory === 'Others' ? !['Civil', 'Criminal', 'Family', 'Property'].includes(a.caseCategory) : a.caseCategory === activeCategory))
+                                                    .map((app, idx) => (
                                                     <tr
                                                         key={app.id}
                                                         onClick={() => setSelectedCase(app)}
@@ -2775,13 +3490,29 @@ const AdminDashboard: React.FC = () => {
                                                             </span>
                                                         </td>
                                                     </tr>
-                                                ))}
+                                                    ));
+                                            })()}
                                         </tbody>
                                     </table>
-                                    {((activeStage === 'Inquiry' && columns.pending.length === 0) ||
-                                        (activeStage === 'Verified' && columns.verified.length === 0) ||
-                                        (activeStage === 'Litigation' && columns.litigation.length === 0) ||
-                                        (activeStage === 'Disposed' && columns.rejected.length === 0)) && (
+                                    {(() => {
+                                        // Check if there are no cases to show
+                                        if (filteredByLawyer) {
+                                            const selectedLawyer = lawyers.find(l => l.id === filteredByLawyer);
+                                            const lawyerCases = filteredData.filter(a => {
+                                                if (a.lawyerId === filteredByLawyer) return true;
+                                                if (selectedLawyer && a.assignedAdvocate === selectedLawyer.name) return true;
+                                                return false;
+                                            }).filter(a => activeCategory === 'All' ? true : (activeCategory === 'Others' ? !['Civil', 'Criminal', 'Family', 'Property'].includes(a.caseCategory) : a.caseCategory === activeCategory));
+                                            if (lawyerCases.length === 0) return true;
+                                        } else {
+                                            const currentCases = activeStage === 'Inquiry' ? columns.pending :
+                                                activeStage === 'Verified' ? columns.verified :
+                                                activeStage === 'Litigation' ? columns.litigation :
+                                                columns.rejected;
+                                            if (currentCases.filter(a => activeCategory === 'All' ? true : (activeCategory === 'Others' ? !['Civil', 'Criminal', 'Family', 'Property'].includes(a.caseCategory) : a.caseCategory === activeCategory)).length === 0) return true;
+                                        }
+                                        return false;
+                                    })() && (
                                             <div className="py-12 sm:py-20 text-center">
                                                 <div className="w-12 h-12 sm:w-16 sm:h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-500">
                                                     <Calendar className="h-6 w-6 sm:h-8 sm:w-8 text-slate-300" />
@@ -2806,7 +3537,7 @@ const AdminDashboard: React.FC = () => {
                                 <div className="inline-block min-w-full align-middle px-3 sm:px-0">
                                     <table className="min-w-full text-left">
                                         <tbody className="divide-y divide-slate-50">
-                                            {appointments.slice(0, 5).map((app, i) => (
+                                            {filteredData.slice(0, 5).map((app, i) => (
                                                 <tr key={i} className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => setSelectedCase(app)}>
                                                     <td className="px-3 sm:px-4 md:px-8 py-3 sm:py-4">
                                                         <div className="flex items-center gap-2 sm:gap-3 md:gap-4">
@@ -3964,6 +4695,595 @@ const AdminDashboard: React.FC = () => {
                                 className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] active:scale-95 transition-all shadow-lg"
                             >
                                 Close District View
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            {/* District Cases Modal - Shows all cases from selected district */}
+            {districtCasesModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-6xl max-h-[90vh] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
+                        {/* Header */}
+                        <div className="p-6 sm:p-8 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-emerald-500 to-teal-600">
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center shadow-lg">
+                                    <MapPin className="h-6 w-6 text-white" />
+                                </div>
+                                <div>
+                                    <h3 className="text-2xl font-black text-white leading-tight">
+                                        {districtCasesModal.district}
+                                    </h3>
+                                    <p className="text-sm font-bold text-white/80">
+                                        {districtCasesModal.cases.length} {districtCasesModal.cases.length === 1 ? 'Case' : 'Cases'}
+                                    </p>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => setDistrictCasesModal(null)} 
+                                className="p-2.5 bg-white/20 backdrop-blur-md border border-white/30 rounded-xl text-white hover:bg-white/30 transition-colors shadow-sm"
+                            >
+                                <XCircle className="h-6 w-6" />
+                            </button>
+                        </div>
+
+                        {/* Cases List */}
+                        <div className="flex-1 overflow-y-auto p-6 sm:p-8 scrollbar-hide">
+                            {districtCasesModal.cases.length === 0 ? (
+                                <div className="text-center py-12">
+                                    <FileText className="h-16 w-16 text-slate-300 mx-auto mb-4" />
+                                    <h3 className="text-lg font-black text-slate-900 mb-2">No Cases Found</h3>
+                                    <p className="text-sm font-bold text-slate-400">No cases found for this district</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {districtCasesModal.cases.map((caseItem, idx) => {
+                                        const isClientAppointment = 'district' in caseItem && !('city' in caseItem);
+                                        return (
+                                            <div
+                                                key={caseItem.id}
+                                                onClick={() => {
+                                                    if (isClientAppointment) {
+                                                        setSelectedClientAppointment(caseItem as ClientAppointmentRecord);
+                                                    } else {
+                                                        setSelectedCase(caseItem as AppointmentRecord);
+                                                    }
+                                                    setDistrictCasesModal(null);
+                                                }}
+                                                className="bg-white rounded-xl border-2 border-slate-200 p-5 sm:p-6 hover:border-emerald-400 hover:shadow-lg transition-all cursor-pointer group"
+                                            >
+                                                <div className="flex items-start justify-between mb-4">
+                                                    <div className="flex items-center gap-4 flex-1">
+                                                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white font-black text-lg flex-shrink-0">
+                                                            {caseItem.fullName.charAt(0).toUpperCase()}
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <h4 className="text-lg font-black text-slate-900 uppercase tracking-tight truncate">
+                                                                {caseItem.fullName}
+                                                            </h4>
+                                                            <p className="text-sm font-bold text-slate-500 mt-1">
+                                                                {caseItem.phoneNumber}
+                                                            </p>
+                                                            {caseItem.emailId && (
+                                                                <p className="text-xs font-medium text-slate-400 mt-1 truncate">
+                                                                    {caseItem.emailId}
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex flex-col items-end gap-2">
+                                                        <span className={`text-xs font-black px-3 py-1 rounded-full uppercase tracking-wider ${
+                                                            caseItem.status === 'Approved' ? 'bg-emerald-100 text-emerald-600' :
+                                                            caseItem.status === 'Pending' ? 'bg-amber-100 text-amber-600' :
+                                                            'bg-red-100 text-red-600'
+                                                        }`}>
+                                                            {caseItem.status}
+                                                        </span>
+                                                        {!isClientAppointment && (caseItem as AppointmentRecord).caseId && (
+                                                            <span className="text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-md">
+                                                                Case ID: {(caseItem as AppointmentRecord).caseId}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                                                    <div>
+                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Case Category</p>
+                                                        <span className="text-sm font-bold text-slate-700 bg-slate-50 px-3 py-1.5 rounded-md border border-slate-200 inline-block">
+                                                            {caseItem.caseCategory}
+                                                        </span>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Date</p>
+                                                        <p className="text-sm font-bold text-slate-700">
+                                                            {new Date(caseItem.appointmentDate).toLocaleDateString('en-IN', { 
+                                                                day: '2-digit', 
+                                                                month: 'short', 
+                                                                year: 'numeric' 
+                                                            })}
+                                                        </p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Time</p>
+                                                        <p className="text-sm font-bold text-slate-700 uppercase">
+                                                            {caseItem.timeSlot}
+                                                        </p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Fees</p>
+                                                        <div className="flex flex-col gap-1">
+                                                            {!isClientAppointment && (caseItem as AppointmentRecord).consultationFee && (
+                                                                <span className="text-xs font-bold text-slate-600">
+                                                                    Consult: ₹{(caseItem as AppointmentRecord).consultationFee || 0}
+                                                                </span>
+                                                            )}
+                                                            {!isClientAppointment && (caseItem as AppointmentRecord).caseFee && (
+                                                                <span className="text-xs font-bold text-slate-600">
+                                                                    Case: ₹{(caseItem as AppointmentRecord).caseFee || 0}
+                                                                </span>
+                                                            )}
+                                                            {isClientAppointment && (caseItem as ClientAppointmentRecord).consultationFee && (
+                                                                <span className="text-xs font-bold text-slate-600">
+                                                                    Consult: ₹{(caseItem as ClientAppointmentRecord).consultationFee || 0}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                
+                                                {caseItem.description && (
+                                                    <div className="pt-4 border-t border-slate-200">
+                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Description</p>
+                                                        <p className="text-sm text-slate-600 leading-relaxed line-clamp-3">
+                                                            {caseItem.description}
+                                                        </p>
+                                                    </div>
+                                                )}
+                                                
+                                                <div className="mt-4 pt-4 border-t border-slate-200 flex items-center justify-between">
+                                                    <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+                                                        <MapPin className="h-3.5 w-3.5" />
+                                                        <span>
+                                                            {isClientAppointment 
+                                                                ? `${(caseItem as ClientAppointmentRecord).district || 'N/A'}, ${(caseItem as ClientAppointmentRecord).state || 'N/A'}`
+                                                                : `${(caseItem as AppointmentRecord).city || 'N/A'}, ${(caseItem as AppointmentRecord).state || 'N/A'}`
+                                                            }
+                                                        </span>
+                                                    </div>
+                                                    <span className="text-xs font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-md">
+                                                        Click to view details
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-6 border-t border-slate-100 bg-white">
+                            <button
+                                onClick={() => setDistrictCasesModal(null)}
+                                className="w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg active:scale-95 transition-all"
+                            >
+                                Close ({districtCasesModal.cases.length} {districtCasesModal.cases.length === 1 ? 'Case' : 'Cases'})
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            {/* Payment Collection Modal */}
+            {selectedPendingPayment && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-md shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-300 overflow-hidden">
+                        {/* Header */}
+                        <div className="p-6 bg-gradient-to-r from-emerald-500 to-teal-600">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center">
+                                        <Banknote className="h-6 w-6 text-white" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-xl font-black text-white">Collect Payment</h3>
+                                        <p className="text-sm font-bold text-white/80">{selectedPendingPayment.item.fullName}</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        setSelectedPendingPayment(null);
+                                        setPaymentCollectionAmount('');
+                                        setPaymentCollectionTxnId('');
+                                        setPaymentCollectionMode('Cash');
+                                    }}
+                                    className="p-2 bg-white/20 backdrop-blur-md border border-white/30 rounded-xl text-white hover:bg-white/30 transition-colors"
+                                >
+                                    <XCircle className="h-5 w-5" />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Content */}
+                        <div className="p-6 space-y-5">
+                            {/* Client Info */}
+                            <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                                <div className="flex items-center justify-between mb-2">
+                                    <p className="text-xs font-bold text-slate-500 uppercase">Amount Due</p>
+                                    <p className="text-lg font-black text-amber-600 flex items-center gap-1">
+                                        <IndianRupee className="h-4 w-4" />
+                                        {(selectedPendingPayment.item.consultationFee || 0) + (selectedPendingPayment.item.caseFee || 0)}
+                                    </p>
+                                </div>
+                                <div className="text-xs text-slate-600">
+                                    <p>Consultation: ₹{selectedPendingPayment.item.consultationFee || 0}</p>
+                                    <p>Case Fee: ₹{selectedPendingPayment.item.caseFee || 0}</p>
+                                </div>
+                            </div>
+
+                            {/* Payment Mode */}
+                            <div className="space-y-2">
+                                <label className="text-sm font-black text-slate-700 uppercase tracking-wider">Payment Mode</label>
+                                <div className="grid grid-cols-3 gap-3">
+                                    <button
+                                        onClick={() => {
+                                            setPaymentCollectionMode('Cash');
+                                            setPaymentCollectionTxnId('');
+                                        }}
+                                        className={`p-4 rounded-xl border-2 transition-all ${
+                                            paymentCollectionMode === 'Cash'
+                                                ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                                                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                                        }`}
+                                    >
+                                        <div className="flex flex-col items-center gap-2">
+                                            <Banknote className="h-6 w-6" />
+                                            <span className="text-sm font-black uppercase">Cash</span>
+                                        </div>
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setPaymentCollectionMode('QR');
+                                            setPaymentCollectionTxnId('');
+                                        }}
+                                        className={`p-4 rounded-xl border-2 transition-all ${
+                                            paymentCollectionMode === 'QR'
+                                                ? 'border-purple-500 bg-purple-50 text-purple-700'
+                                                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                                        }`}
+                                    >
+                                        <div className="flex flex-col items-center gap-2">
+                                            <Smartphone className="h-6 w-6" />
+                                            <span className="text-sm font-black uppercase">QR</span>
+                                        </div>
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setPaymentCollectionMode('UPI');
+                                            setPaymentCollectionTxnId('');
+                                        }}
+                                        className={`p-4 rounded-xl border-2 transition-all ${
+                                            paymentCollectionMode === 'UPI'
+                                                ? 'border-blue-500 bg-blue-50 text-blue-700'
+                                                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                                        }`}
+                                    >
+                                        <div className="flex flex-col items-center gap-2">
+                                            <Smartphone className="h-6 w-6" />
+                                            <span className="text-sm font-black uppercase">UPI</span>
+                                        </div>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Amount */}
+                            <div className="space-y-2">
+                                <label className="text-sm font-black text-slate-700 uppercase tracking-wider">Amount Received</label>
+                                <div className="relative">
+                                    <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                                    <input
+                                        type="number"
+                                        value={paymentCollectionAmount}
+                                        onChange={(e) => setPaymentCollectionAmount(e.target.value)}
+                                        placeholder="Enter amount"
+                                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all font-bold text-slate-900"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* QR Code Display */}
+                            {paymentCollectionMode === 'QR' && (
+                                <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
+                                    <label className="text-sm font-black text-slate-700 uppercase tracking-wider">Scan QR Code</label>
+                                    <div className="bg-white border-2 border-purple-200 rounded-xl p-6 flex flex-col items-center justify-center">
+                                        <div className="bg-white p-4 rounded-lg border-2 border-purple-300 shadow-lg mb-4">
+                                            <img 
+                                                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
+                                                    paymentCollectionAmount && parseFloat(paymentCollectionAmount) > 0 
+                                                        ? `Payment: ₹${paymentCollectionAmount} | Client: ${selectedPendingPayment.item.fullName} | Ref: ${selectedPendingPayment.item.id.slice(-6).toUpperCase()}`
+                                                        : `Payment QR Code | Scan to Pay`
+                                                )}`}
+                                                alt="QR Code"
+                                                className="w-48 h-48"
+                                                onError={(e) => {
+                                                    // Fallback if QR code fails to load
+                                                    const target = e.target as HTMLImageElement;
+                                                    target.style.display = 'none';
+                                                    if (target.parentElement) {
+                                                        target.parentElement.innerHTML = `
+                                                            <div class="w-48 h-48 bg-slate-100 rounded-lg flex items-center justify-center border-2 border-dashed border-slate-300">
+                                                                <div class="text-center">
+                                                                    <p class="text-xs font-bold text-slate-500">QR Code</p>
+                                                                    <p class="text-[10px] text-slate-400 mt-1">Amount: ₹${paymentCollectionAmount || '0'}</p>
+                                                                </div>
+                                                            </div>
+                                                        `;
+                                                    }
+                                                }}
+                                            />
+                                        </div>
+                                        <div className="text-center mb-4">
+                                            <p className="text-sm font-black text-slate-700 mb-1">
+                                                Amount: <span className="text-purple-600">₹{paymentCollectionAmount || '0'}</span>
+                                            </p>
+                                            <p className="text-xs font-bold text-slate-500">
+                                                {selectedPendingPayment.item.fullName}
+                                            </p>
+                                            <p className="text-[10px] text-slate-400 mt-1">
+                                                Reference: {selectedPendingPayment.item.id.slice(-6).toUpperCase()}
+                                            </p>
+                                        </div>
+                                        <p className="text-xs font-bold text-slate-600 text-center mb-3">
+                                            Scan the QR code to complete payment
+                                        </p>
+                                        <div className="space-y-2 w-full">
+                                            <label className="text-xs font-black text-slate-700 uppercase tracking-wider">Transaction Reference / UTR</label>
+                                            <input
+                                                type="text"
+                                                value={paymentCollectionTxnId}
+                                                onChange={(e) => setPaymentCollectionTxnId(e.target.value)}
+                                                placeholder="Enter transaction reference or UTR number"
+                                                className="w-full px-4 py-2.5 bg-slate-50 border-2 border-slate-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all font-medium text-slate-900 text-sm"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* UPI Input */}
+                            {paymentCollectionMode === 'UPI' && (
+                                <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                                    <label className="text-sm font-black text-slate-700 uppercase tracking-wider">UPI Payment Details</label>
+                                    <div className="space-y-3">
+                                        <div>
+                                            <label className="text-xs font-bold text-slate-600 mb-1 block">UPI ID / Phone Number</label>
+                                            <input
+                                                type="text"
+                                                value={paymentCollectionTxnId}
+                                                onChange={(e) => setPaymentCollectionTxnId(e.target.value)}
+                                                placeholder="Enter UPI ID (e.g., name@paytm) or Phone Number"
+                                                className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all font-medium text-slate-900"
+                                            />
+                                        </div>
+                                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                            <p className="text-xs font-bold text-blue-700 mb-1">Payment Instructions:</p>
+                                            <ul className="text-[10px] text-blue-600 space-y-1 list-disc list-inside">
+                                                <li>Enter the UPI ID or phone number used for payment</li>
+                                                <li>Verify the payment has been received</li>
+                                                <li>Enter transaction reference if available</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-6 border-t border-slate-100 bg-slate-50 flex gap-3">
+                            <button
+                                onClick={() => {
+                                    setSelectedPendingPayment(null);
+                                    setPaymentCollectionAmount('');
+                                    setPaymentCollectionTxnId('');
+                                    setPaymentCollectionMode('Cash');
+                                }}
+                                className="flex-1 py-3 bg-white text-slate-600 rounded-xl font-black text-sm uppercase tracking-wider border border-slate-200 hover:bg-slate-50 transition-all active:scale-95"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handlePaymentCollection}
+                                disabled={isProcessing || !paymentCollectionAmount || parseFloat(paymentCollectionAmount) <= 0 || ((paymentCollectionMode === 'QR' || paymentCollectionMode === 'UPI') && !paymentCollectionTxnId.trim())}
+                                className="flex-1 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl font-black text-sm uppercase tracking-wider shadow-lg active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {isProcessing ? 'Processing...' : 'Collect Payment'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            {/* Payment Report Preview Modal */}
+            {showPaymentReportPreview && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-6xl max-h-[90vh] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
+                        {/* Header */}
+                        <div className="p-6 bg-gradient-to-r from-blue-600 to-indigo-600">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center">
+                                        <FileText className="h-6 w-6 text-white" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-2xl font-black text-white">Payment Report Preview</h3>
+                                        <p className="text-sm font-bold text-white/80">
+                                            {incomeFilterMode === 'All' ? 'Monthly' : incomeFilterMode} Report
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setShowPaymentReportPreview(false)}
+                                    className="p-2 bg-white/20 backdrop-blur-md border border-white/30 rounded-xl text-white hover:bg-white/30 transition-colors"
+                                >
+                                    <XCircle className="h-6 w-6" />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Report Content */}
+                        <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
+                            {(() => {
+                                const filtered = getFilteredPayments(incomeFilterMode === 'All' ? 'Monthly' : incomeFilterMode as any);
+                                const totalAmount = filtered.reduce((sum, p) => sum + p.amount, 0);
+                                
+                                if (filtered.length === 0) {
+                                    return (
+                                        <div className="text-center py-12">
+                                            <FileText className="h-16 w-16 text-slate-300 mx-auto mb-4" />
+                                            <h3 className="text-lg font-black text-slate-900 mb-2">No Payment Records</h3>
+                                            <p className="text-sm font-bold text-slate-400">
+                                                No payment records found for {incomeFilterMode === 'All' ? 'Monthly' : incomeFilterMode}
+                                            </p>
+                                        </div>
+                                    );
+                                }
+
+                                return (
+                                    <div className="space-y-6">
+                                        {/* Summary */}
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                            <div className="bg-blue-50 p-5 rounded-xl border border-blue-200">
+                                                <p className="text-xs font-black text-blue-600 uppercase tracking-widest mb-2">Total Records</p>
+                                                <p className="text-3xl font-black text-blue-600">{filtered.length}</p>
+                                            </div>
+                                            <div className="bg-emerald-50 p-5 rounded-xl border border-emerald-200">
+                                                <p className="text-xs font-black text-emerald-600 uppercase tracking-widest mb-2">Total Amount</p>
+                                                <p className="text-3xl font-black text-emerald-600 flex items-center gap-1">
+                                                    <IndianRupee className="h-6 w-6" />
+                                                    {totalAmount.toLocaleString()}
+                                                </p>
+                                            </div>
+                                            <div className="bg-purple-50 p-5 rounded-xl border border-purple-200">
+                                                <p className="text-xs font-black text-purple-600 uppercase tracking-widest mb-2">Payment Modes</p>
+                                                <p className="text-3xl font-black text-purple-600">
+                                                    {new Set(filtered.map(p => p.paymentMode)).size}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {/* Report Table */}
+                                        <div className="bg-white rounded-xl border-2 border-slate-200 overflow-hidden">
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-left border-collapse">
+                                                    <thead className="bg-slate-50 border-b-2 border-slate-200">
+                                                        <tr>
+                                                            <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase tracking-widest">#</th>
+                                                            <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase tracking-widest">Case ID</th>
+                                                            <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase tracking-widest">Client Name</th>
+                                                            <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase tracking-widest text-right">Consultation Fee</th>
+                                                            <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase tracking-widest text-right">Case Fee</th>
+                                                            <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase tracking-widest text-right">Total Amount</th>
+                                                            <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase tracking-widest text-center">Payment Mode</th>
+                                                            <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase tracking-widest">Payment Date</th>
+                                                            <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase tracking-widest">Transaction ID</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-100">
+                                                        {filtered.map((pay, idx) => (
+                                                            <tr key={pay.id} className="hover:bg-slate-50 transition-colors">
+                                                                <td className="px-4 py-3 text-sm font-medium text-slate-400">{idx + 1}</td>
+                                                                <td className="px-4 py-3">
+                                                                    <span className="text-xs font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-md">
+                                                                        {pay.caseId}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-4 py-3">
+                                                                    <p className="text-sm font-bold text-slate-700">{pay.clientName}</p>
+                                                                </td>
+                                                                <td className="px-4 py-3 text-right">
+                                                                    <span className="text-sm font-bold text-slate-600">
+                                                                        ₹{pay.consultationFee}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-4 py-3 text-right">
+                                                                    <span className="text-sm font-bold text-slate-600">
+                                                                        ₹{pay.dueFee}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-4 py-3 text-right">
+                                                                    <span className="text-sm font-black text-emerald-600 flex items-center justify-end gap-1">
+                                                                        <IndianRupee className="h-3.5 w-3.5" />
+                                                                        {pay.amount}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-4 py-3 text-center">
+                                                                    <span className={`text-xs font-black px-2 py-1 rounded-md uppercase ${
+                                                                        pay.paymentMode === 'Cash' ? 'bg-emerald-100 text-emerald-600' :
+                                                                        pay.paymentMode === 'QR' ? 'bg-purple-100 text-purple-600' :
+                                                                        'bg-blue-100 text-blue-600'
+                                                                    }`}>
+                                                                        {pay.paymentMode}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-4 py-3">
+                                                                    <div className="flex flex-col">
+                                                                        <span className="text-xs font-bold text-slate-700">
+                                                                            {new Date(pay.paymentDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                                        </span>
+                                                                        <span className="text-[10px] text-slate-500">
+                                                                            {new Date(pay.paymentDate).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                                                                        </span>
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-4 py-3">
+                                                                    <span className="text-xs font-medium text-slate-500">
+                                                                        {pay.transactionId || 'N/A'}
+                                                                    </span>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                    <tfoot className="bg-slate-50 border-t-2 border-slate-200">
+                                                        <tr>
+                                                            <td colSpan={5} className="px-4 py-3 text-sm font-black text-slate-700 text-right">
+                                                                Total:
+                                                            </td>
+                                                            <td className="px-4 py-3 text-right">
+                                                                <span className="text-lg font-black text-emerald-600 flex items-center justify-end gap-1">
+                                                                    <IndianRupee className="h-4 w-4" />
+                                                                    {totalAmount.toLocaleString()}
+                                                                </span>
+                                                            </td>
+                                                            <td colSpan={3}></td>
+                                                        </tr>
+                                                    </tfoot>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-6 border-t border-slate-100 bg-slate-50 flex gap-3">
+                            <button
+                                onClick={() => setShowPaymentReportPreview(false)}
+                                className="flex-1 py-3 bg-white text-slate-600 rounded-xl font-black text-sm uppercase tracking-wider border border-slate-200 hover:bg-slate-50 transition-all active:scale-95"
+                            >
+                                Close
+                            </button>
+                            <button
+                                onClick={() => {
+                                    downloadCSV(incomeFilterMode === 'All' ? 'Monthly' : incomeFilterMode as any);
+                                    setShowPaymentReportPreview(false);
+                                }}
+                                className="flex-1 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl font-black text-sm uppercase tracking-wider shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
+                            >
+                                <FileText className="h-4 w-4" />
+                                Download CSV
                             </button>
                         </div>
                     </div>

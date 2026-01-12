@@ -69,55 +69,55 @@ const PaymentPage: React.FC = () => {
     }
 
     return (
-        <div className="max-w-6xl mx-auto px-4 py-8">
+        <div className="max-w-6xl mx-auto px-2 sm:px-4 py-4 sm:py-8 w-full overflow-x-hidden" style={{ maxWidth: '100vw' }}>
             <button
                 onClick={() => navigate('/admin')}
-                className="flex items-center gap-2 text-slate-500 font-bold hover:text-slate-900 mb-8 transition-colors"
+                className="flex items-center gap-2 text-slate-500 font-bold hover:text-slate-900 mb-4 sm:mb-8 transition-colors text-sm sm:text-base"
             >
-                <ChevronLeft className="h-5 w-5" />
-                Return to Dashboard
+                <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5" />
+                <span className="text-xs sm:text-base">Return to Dashboard</span>
             </button>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-12 w-full">
                 {/* Left: Summary & Details */}
-                <div className="lg:col-span-2 space-y-8">
-                    <div className="bg-white rounded-[2.5rem] p-10 border border-slate-100 shadow-sm relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-40 h-40 bg-blue-50/50 rounded-full -mr-20 -mt-20"></div>
-                        <h1 className="text-4xl font-black text-slate-900 mb-2">Checkout</h1>
-                        <p className="text-slate-500 font-medium">Invoice for professional legal services provided to {appointment.fullName}</p>
+                <div className="lg:col-span-2 space-y-4 sm:space-y-6 lg:space-y-8 w-full">
+                    <div className="bg-white rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-6 md:p-8 lg:p-10 border border-slate-100 shadow-sm relative overflow-hidden w-full">
+                        <div className="absolute top-0 right-0 w-20 h-20 sm:w-32 sm:h-32 md:w-40 md:h-40 bg-blue-50/50 rounded-full -mr-10 sm:-mr-16 md:-mr-20 -mt-10 sm:-mt-16 md:-mt-20"></div>
+                        <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 mb-2">Checkout</h1>
+                        <p className="text-xs sm:text-sm md:text-base text-slate-500 font-medium">Invoice for professional legal services provided to {appointment.fullName}</p>
 
-                        <div className="mt-12 space-y-6">
-                            <div className="flex justify-between items-center py-4 border-b border-slate-50">
-                                <div>
-                                    <h4 className="font-bold text-slate-800">Initial Consultation</h4>
-                                    <p className="text-sm text-slate-400">Fixed rate advisory session</p>
+                        <div className="mt-6 sm:mt-8 md:mt-12 space-y-4 sm:space-y-6">
+                            <div className="flex justify-between items-center py-3 sm:py-4 border-b border-slate-50 gap-2">
+                                <div className="min-w-0 flex-1">
+                                    <h4 className="text-sm sm:text-base font-bold text-slate-800">Initial Consultation</h4>
+                                    <p className="text-xs sm:text-sm text-slate-400">Fixed rate advisory session</p>
                                 </div>
-                                <span className="text-xl font-black text-slate-900">₹{consultationFee.toLocaleString()}</span>
+                                <span className="text-lg sm:text-xl font-black text-slate-900 flex-shrink-0">₹{consultationFee.toLocaleString()}</span>
                             </div>
-                            <div className="flex justify-between items-center py-4 border-b border-slate-50">
-                                <div>
-                                    <h4 className="font-bold text-slate-800">Legal Case Retainer</h4>
-                                    <p className="text-sm text-slate-400">Documentation and representation fee</p>
+                            <div className="flex justify-between items-center py-3 sm:py-4 border-b border-slate-50 gap-2">
+                                <div className="min-w-0 flex-1">
+                                    <h4 className="text-sm sm:text-base font-bold text-slate-800">Legal Case Retainer</h4>
+                                    <p className="text-xs sm:text-sm text-slate-400">Documentation and representation fee</p>
                                 </div>
-                                <span className="text-xl font-black text-slate-900">₹{caseFee.toLocaleString()}</span>
+                                <span className="text-lg sm:text-xl font-black text-slate-900 flex-shrink-0">₹{caseFee.toLocaleString()}</span>
                             </div>
-                            <div className="flex justify-between items-center pt-8">
-                                <span className="text-2xl font-black text-slate-900">Total Payable</span>
-                                <div className="text-right">
-                                    <span className="text-4xl font-black text-blue-600 flex items-center gap-1 group">
-                                        <IndianRupee className="h-7 w-7" />
+                            <div className="flex justify-between items-center pt-4 sm:pt-6 md:pt-8 gap-2">
+                                <span className="text-lg sm:text-xl md:text-2xl font-black text-slate-900">Total Payable</span>
+                                <div className="text-right flex-shrink-0">
+                                    <span className="text-2xl sm:text-3xl md:text-4xl font-black text-blue-600 flex items-center gap-1 group">
+                                        <IndianRupee className="h-5 w-5 sm:h-6 sm:w-6 md:h-7 md:w-7" />
                                         {totalAmount.toLocaleString()}
                                     </span>
-                                    <p className="text-xs font-bold text-slate-400 mt-1">Inclusive of all legal taxes</p>
+                                    <p className="text-[10px] sm:text-xs font-bold text-slate-400 mt-1">Inclusive of all legal taxes</p>
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     {/* Payment Methods */}
-                    <div className="space-y-6">
-                        <h3 className="text-xl font-black text-slate-900 ml-2">Choose Payment Method</h3>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-4 sm:space-y-6">
+                        <h3 className="text-lg sm:text-xl font-black text-slate-900 ml-2">Choose Payment Method</h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 w-full">
                             {[
                                 { id: 'card', name: 'Credit / Debit Card', icon: CreditCard, desc: 'Visa, Mastercard, Amex' },
                                 { id: 'upi', name: 'UPI Gateway', icon: Smartphone, desc: 'Google Pay, PhonePe, BHIM' },
@@ -127,17 +127,17 @@ const PaymentPage: React.FC = () => {
                                 <button
                                     key={method.id}
                                     onClick={() => setSelectedMethod(method.id)}
-                                    className={`flex items-start gap-4 p-6 rounded-3xl border-2 transition-all text-left ${selectedMethod === method.id
+                                    className={`flex items-start gap-3 sm:gap-4 p-4 sm:p-5 md:p-6 rounded-2xl sm:rounded-3xl border-2 transition-all text-left w-full ${selectedMethod === method.id
                                         ? 'border-blue-600 bg-blue-50/30'
                                         : 'border-slate-100 bg-white hover:border-slate-200'
                                         }`}
                                 >
-                                    <div className={`p-3 rounded-2xl ${selectedMethod === method.id ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-400'}`}>
-                                        <method.icon className="h-6 w-6" />
+                                    <div className={`p-2 sm:p-3 rounded-xl sm:rounded-2xl flex-shrink-0 ${selectedMethod === method.id ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-400'}`}>
+                                        <method.icon className="h-5 w-5 sm:h-6 sm:w-6" />
                                     </div>
-                                    <div>
-                                        <h5 className="font-bold text-slate-800">{method.name}</h5>
-                                        <p className="text-xs text-slate-400 mt-1 font-medium">{method.desc}</p>
+                                    <div className="min-w-0 flex-1">
+                                        <h5 className="text-sm sm:text-base font-bold text-slate-800">{method.name}</h5>
+                                        <p className="text-[10px] sm:text-xs text-slate-400 mt-1 font-medium">{method.desc}</p>
                                     </div>
                                 </button>
                             ))}
@@ -146,43 +146,43 @@ const PaymentPage: React.FC = () => {
                 </div>
 
                 {/* Right: Payment Form */}
-                <div className="space-y-6">
-                    <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white shadow-2xl sticky top-24">
-                        <div className="flex items-center gap-3 mb-8">
-                            <ShieldCheck className="h-6 w-6 text-emerald-400" />
-                            <span className="text-xs font-black uppercase tracking-widest text-slate-400">Secure 256-bit Endpoint</span>
+                <div className="space-y-4 sm:space-y-6 w-full">
+                    <div className="bg-slate-900 rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-6 md:p-8 text-white shadow-2xl sticky top-4 sm:top-24 w-full">
+                        <div className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6 md:mb-8">
+                            <ShieldCheck className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-400 flex-shrink-0" />
+                            <span className="text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-400">Secure 256-bit Endpoint</span>
                         </div>
 
                         {selectedMethod === 'card' && (
-                            <div className="space-y-5">
+                            <div className="space-y-4 sm:space-y-5 w-full">
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black uppercase text-slate-500">Card Number</label>
-                                    <input className="w-full bg-slate-800 border border-slate-700/50 rounded-xl px-4 py-3 font-medium focus:ring-2 focus:ring-blue-500 outline-none" placeholder="xxxx xxxx xxxx xxxx" />
+                                    <input className="w-full max-w-full bg-slate-800 border border-slate-700/50 rounded-lg sm:rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 font-medium focus:ring-2 focus:ring-blue-500 outline-none text-sm" placeholder="xxxx xxxx xxxx xxxx" />
                                 </div>
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-2 gap-3 sm:gap-4">
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-black uppercase text-slate-500">Expiry</label>
-                                        <input className="w-full bg-slate-800 border border-slate-700/50 rounded-xl px-4 py-3 font-medium focus:ring-2 focus:ring-blue-500 outline-none" placeholder="MM/YY" />
+                                        <input className="w-full max-w-full bg-slate-800 border border-slate-700/50 rounded-lg sm:rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 font-medium focus:ring-2 focus:ring-blue-500 outline-none text-sm" placeholder="MM/YY" />
                                     </div>
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-black uppercase text-slate-500">CVV</label>
-                                        <input className="w-full bg-slate-800 border border-slate-700/50 rounded-xl px-4 py-3 font-medium focus:ring-2 focus:ring-blue-500 outline-none" placeholder="***" type="password" />
+                                        <input className="w-full max-w-full bg-slate-800 border border-slate-700/50 rounded-lg sm:rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 font-medium focus:ring-2 focus:ring-blue-500 outline-none text-sm" placeholder="***" type="password" />
                                     </div>
                                 </div>
                             </div>
                         )}
 
                         {selectedMethod === 'upi' && (
-                            <div className="space-y-4">
-                                <div className="bg-white/5 rounded-2xl p-6 text-center border border-white/10">
-                                    <p className="text-sm text-slate-400 mb-4">Scan QR code with any UPI App</p>
-                                    <div className="w-32 h-32 bg-white rounded-xl mx-auto mb-4 flex items-center justify-center p-2">
+                            <div className="space-y-3 sm:space-y-4 w-full">
+                                <div className="bg-white/5 rounded-xl sm:rounded-2xl p-4 sm:p-6 text-center border border-white/10 w-full">
+                                    <p className="text-xs sm:text-sm text-slate-400 mb-3 sm:mb-4">Scan QR code with any UPI App</p>
+                                    <div className="w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 bg-white rounded-lg sm:rounded-xl mx-auto mb-3 sm:mb-4 flex items-center justify-center p-2">
                                         {/* Mock QR */}
                                         <div className="grid grid-cols-4 gap-1 w-full h-full opacity-20">
                                             {[...Array(16)].map((_, i) => <div key={i} className="bg-black"></div>)}
                                         </div>
                                     </div>
-                                    <p className="text-xs font-bold text-slate-500">VPA: lexconnect.pay@bank</p>
+                                    <p className="text-[10px] sm:text-xs font-bold text-slate-500">VPA: lexconnect.pay@bank</p>
                                 </div>
                             </div>
                         )}
@@ -190,7 +190,7 @@ const PaymentPage: React.FC = () => {
                         <button
                             onClick={handlePayment}
                             disabled={isProcessing}
-                            className="w-full mt-10 py-5 bg-blue-600 text-white rounded-2xl font-black text-lg flex items-center justify-center gap-3 hover:bg-blue-500 transition-all shadow-xl shadow-blue-600/20 active:scale-95 disabled:bg-slate-700 disabled:cursor-not-allowed"
+                            className="w-full max-w-full mt-6 sm:mt-8 md:mt-10 py-3 sm:py-4 md:py-5 bg-blue-600 text-white rounded-xl sm:rounded-2xl font-black text-sm sm:text-base md:text-lg flex items-center justify-center gap-2 sm:gap-3 hover:bg-blue-500 transition-all shadow-xl shadow-blue-600/20 active:scale-95 disabled:bg-slate-700 disabled:cursor-not-allowed"
                         >
                             {isProcessing ? (
                                 <div className="h-6 w-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>

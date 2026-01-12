@@ -22,9 +22,9 @@ function AppContent() {
   const isClientAppointmentPath = location.pathname === '/client-appointment';
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-gray-50 flex flex-col w-full overflow-x-hidden" style={{ maxWidth: '100vw', overflowX: 'hidden' }}>
       {!isAdminPath && !isLawyerPath && !isAppointmentPath && !isClientAppointmentPath && <Navbar />}
-      <main className={`flex-grow ${!isAdminPath && !isLawyerPath && !isAppointmentPath && !isClientAppointmentPath ? 'container mx-auto py-6 px-4' : 'w-full'}`}>
+      <main className={`flex-grow w-full overflow-x-hidden ${!isAdminPath && !isLawyerPath && !isAppointmentPath && !isClientAppointmentPath ? 'container mx-auto py-6 px-4' : 'w-full'}`} style={{ maxWidth: '100vw', overflowX: 'hidden' }}>
         <Routes>
           <Route path="/lawyer/login" element={<LawyerLogin />} />
           <Route path="/lawyer/case-finder" element={<CaseFinder />} />

@@ -160,7 +160,7 @@ const Appointment: React.FC = () => {
             return;
         }
 
-        setFormData(prev => ({ ...prev, [name]: value }));
+            setFormData(prev => ({ ...prev, [name]: value }));
 
         if (errors[name as keyof AppointmentFormData]) {
             setErrors(prev => ({ ...prev, [name]: undefined }));
@@ -475,17 +475,17 @@ const Appointment: React.FC = () => {
                             <label className="text-sm font-bold text-slate-700">Case Type <span className="text-red-500">*</span></label>
                             <div className="relative">
                                 <Scale className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                                <select
+                            <select
                                     name="caseType"
                                     value={formData.caseType}
-                                    onChange={handleInputChange}
+                                onChange={handleInputChange}
                                     className={`w-full pl-10 pr-4 py-3 rounded-xl border focus:ring-2 focus:ring-blue-500 outline-none transition-all appearance-none bg-white ${errors.caseType ? 'border-red-500 bg-red-50' : 'border-slate-300'}`}
-                                >
+                            >
                                     <option value="">Select case type</option>
                                     {caseTypes.map(type => (
                                         <option key={type} value={type}>{type}</option>
-                                    ))}
-                                </select>
+                                ))}
+                            </select>
                             </div>
                             {errors.caseType && <p className="text-xs text-red-500">{errors.caseType}</p>}
                         </div>
@@ -549,17 +549,17 @@ const Appointment: React.FC = () => {
                             <label className="text-sm font-bold text-slate-700">Branch Location <span className="text-red-500">*</span></label>
                             <div className="relative">
                                 <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                                <select
+                            <select
                                     name="branchLocation"
                                     value={formData.branchLocation}
-                                    onChange={handleInputChange}
+                                onChange={handleInputChange}
                                     className={`w-full pl-10 pr-4 py-3 rounded-xl border focus:ring-2 focus:ring-blue-500 outline-none transition-all appearance-none bg-white ${errors.branchLocation ? 'border-red-500 bg-red-50' : 'border-slate-300'}`}
-                                >
+                            >
                                     <option value="">Select branch location</option>
                                     {tamilNaduDistricts.map(district => (
                                         <option key={district} value={district}>{district}</option>
-                                    ))}
-                                </select>
+                                ))}
+                            </select>
                             </div>
                             {errors.branchLocation && <p className="text-xs text-red-500">{errors.branchLocation}</p>}
                         </div>
@@ -661,8 +661,8 @@ const Appointment: React.FC = () => {
                                         className={`flex-1 px-4 py-3 rounded-xl text-sm font-bold border-2 transition-all ${
                                             formData.feeType === type
                                                 ? 'bg-green-600 text-white border-green-600 shadow-md'
-                                                : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400'
-                                        }`}
+                                            : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400'
+                                            }`}
                                     >
                                         {type}
                                     </button>
@@ -674,14 +674,14 @@ const Appointment: React.FC = () => {
                             <label className="text-sm font-bold text-slate-700">Total Fee <span className="text-red-500">*</span></label>
                             <div className="relative">
                                 <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                                <input
+                            <input
                                     type="text"
                                     name="totalFee"
                                     value={formData.totalFee}
-                                    onChange={handleInputChange}
+                                onChange={handleInputChange}
                                     placeholder="Enter total fee"
                                     className={`w-full pl-10 pr-4 py-3 rounded-xl border focus:ring-2 focus:ring-blue-500 outline-none transition-all ${errors.totalFee ? 'border-red-500 bg-red-50' : 'border-slate-300'}`}
-                                />
+                            />
                             </div>
                             {errors.totalFee && <p className="text-xs text-red-500">{errors.totalFee}</p>}
                         </div>
@@ -756,8 +756,8 @@ const Appointment: React.FC = () => {
                                         {status}
                                     </button>
                                 ))}
+                                </div>
                             </div>
-                        </div>
 
                         <div className="space-y-2">
                             <label className="text-sm font-bold text-slate-700">Upload Documents</label>
@@ -796,11 +796,11 @@ const Appointment: React.FC = () => {
 
                         <div className="space-y-2">
                             <label className="text-sm font-bold text-slate-700">Important Notes / Remarks</label>
-                            <textarea
+                                <textarea
                                 name="importantNotes"
-                                rows={4}
+                                    rows={4}
                                 value={formData.importantNotes}
-                                onChange={handleInputChange}
+                                    onChange={handleInputChange}
                                 placeholder="Enter important notes or remarks"
                                 className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                             />
@@ -843,7 +843,7 @@ const Appointment: React.FC = () => {
                         disabled={isSubmitting}
                         className={`w-full sm:w-auto flex items-center justify-center gap-2 px-10 py-4 rounded-xl text-base font-black text-white shadow-xl transition-all hover:-translate-y-0.5 ${
                             isSubmitting ? 'bg-slate-400 cursor-not-allowed' : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700'
-                        }`}
+                            }`}
                     >
                         {isSubmitting ? 'Submitting...' : 'Submit Appointment'}
                         {!isSubmitting && <ChevronRight className="h-5 w-5" />}
@@ -860,7 +860,7 @@ const Appointment: React.FC = () => {
                                 {modal.isError ? <AlertCircle className="h-10 w-10" /> : <CheckCircle2 className="h-10 w-10" />}
                             </div>
                             <h3 className="text-2xl font-black text-slate-900 mb-4 leading-tight">{modal.title}</h3>
-                            <p className="text-slate-500 font-medium leading-relaxed">{modal.message}</p>
+                                <p className="text-slate-500 font-medium leading-relaxed">{modal.message}</p>
                             <button
                                 onClick={() => {
                                     setModal(prev => ({ ...prev, show: false }));
