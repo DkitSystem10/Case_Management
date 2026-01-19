@@ -911,7 +911,7 @@ const AdminDashboard: React.FC = () => {
             )}
 
             {/* Left Sidebar - Hidden on Mobile */}
-            <aside className={`hidden md:flex fixed md:sticky top-0 h-screen z-[70] transition-all duration-300 w-[100px] bg-[#222834] flex-col items-center py-5`}>
+            <aside className={`hidden md:flex fixed top-0 left-0 h-screen z-[70] transition-all duration-300 w-[100px] bg-[#222834] flex-col items-center py-5`}>
                 <div className="mb-6">
                     <div className="bg-blue-600/10 p-1.5 rounded-lg">
                         <LegalLogo className="h-5 w-5 text-blue-500" />
@@ -950,7 +950,7 @@ const AdminDashboard: React.FC = () => {
             </aside>
 
             {/* Main Content Area */}
-            <div className="flex-1 flex flex-col min-w-0">
+            <div className="flex-1 flex flex-col min-w-0 md:ml-[100px] overflow-y-auto">
                 {/* Header */}
                 <header className="min-h-[70px] sm:h-[70px] bg-white/50 backdrop-blur-sm border-b border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-0 px-3 sm:px-4 md:px-6 py-2 sm:py-0 sticky top-0 z-40">
                     <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
